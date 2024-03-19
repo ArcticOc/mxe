@@ -1,6 +1,11 @@
 mini_imagenet/*
+!mini_imagenet/.gitkeep
 cifar_fs/*
+!cifar_fs/.gitkeep
 tiered_imagenet/*
+!tiered_imagenet/.gitkeep
 runs/*
+!runs/.gitkeep
 result/*
+!result/.gitkeep
 
