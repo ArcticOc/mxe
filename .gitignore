@@ -1,0 +1,6 @@
+mini_imagenet/*
+cifar_fs/*
+tiered_imagenet/*
+runs/*
+result/*
+
