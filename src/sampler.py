@@ -68,7 +68,7 @@ class RASampler(torch.utils.data.Sampler):
     def set_epoch(self, epoch):
         self.epoch = epoch
 
-
+#NOTE: It was stated to be used in the original paper, whereas not in code.
 class ClassAwareDistributedSampler(torch.utils.data.distributed.DistributedSampler):
     def __init__(self, dataset, class_per_batch, sample_per_class, **kwargs) -> None:
         super(ClassAwareDistributedSampler, self).__init__(dataset, **kwargs)

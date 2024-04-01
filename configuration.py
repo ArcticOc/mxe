@@ -1,7 +1,7 @@
 import argparse
 
 # Constants for default values
-DEFAULT_DATA_PATH = "./tiered_imagenet"
+DEFAULT_DATA_PATH = "mini_imagenet"
 DEFAULT_VAL_RESIZE_SIZE = 84
 DEFAULT_VAL_CROP_SIZE = 84
 DEFAULT_TRAIN_CROP_SIZE = 84

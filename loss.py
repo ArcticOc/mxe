@@ -67,6 +67,7 @@ class FewShotNCALoss(nn.Module):
         return self.xe(torch.cat([pos_logit, neg_logit], 1), yq_new)
 
 
+#FIXME: There is no shot setting in this loss function
 class PNLoss(nn.Module):
     def __init__(self, T=1.0, logit="l2_dist", **kwargs):
         super(PNLoss, self).__init__()
