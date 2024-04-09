@@ -9,3 +9,4 @@ runs/*
 result/*
 !result/.gitkeep
 */__pycache__/*
+*.pyc
