@@ -63,8 +63,10 @@ class FewShotNCALoss(nn.Module):
         logit[ind[idx], pos[idx]] -= INF
         pos_logit = torch.logsumexp(masked_logit(logit, class_mask), 1, keepdim=True)
         neg_logit = torch.logsumexp(masked_logit(logit, ~class_mask), 1, keepdim=True)
-
+        # total_logit = torch.logsumexp(torch.cat((pos_logit, neg_logit), dim=1), dim=1, keepdim=True)
+        # temp = torch.cat([pos_logit, neg_logit], 1)
         return self.xe(torch.cat([pos_logit, neg_logit], 1), yq_new)
+        # return -1 * torch.sum(pos_logit - total_logit).mean()
 
 
 # FIXME: There is no shot setting in this loss function
@@ -241,7 +243,7 @@ class PNCALoss(nn.Module):
             classes = ys.unique()
             one_hot = ys.view(-1, 1) == classes
             class_count = one_hot.sum(0, keepdim=True)
-            yq_new = one_hot[pos].nonzero()[:, 1]
+            yq_new = torch.zeros_like(yq)
 
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus.unsqueeze(0).repeat(len(yq), 1, 1)
@@ -262,12 +264,16 @@ class PNCALoss(nn.Module):
         logit_numerator *= C > 0.1
 
         # FewShotNCALoss logic for denominator
-        class_mask = yq.view(-1, 1) == ys.view(1, -1)
-        logit_denominator = self.logit_func(xq, xs) / self.T
-        neg_logit = torch.logsumexp(logit_denominator * ~class_mask, 1, keepdim=True)
+        class_mask = torch.ones((len(yq), len(ys)))
+        logit = self.logit_func(xq, xs) / self.T
+        neg_logit = torch.log(
+            torch.sum(torch.exp(masked_logit(logit, class_mask)), 1, keepdim=True)
+            - logit_numerator
+        )
 
         # Combine logit from PNCA as numerator and neg_logit from FewShotNCA as denominator
-        integrated_logit = logit_numerator - neg_logit
+        integrated_logit = torch.cat([logit_numerator, neg_logit], 1)
+
         return self.xe(integrated_logit, yq_new)
 
 
@@ -304,11 +310,13 @@ class NCAPLoss(nn.Module):
         logit_numerator = self.logit_func(xq, xs) / self.T
 
         class_mask = yq.view(-1, 1) == ys.view(1, -1)
-        pos_logit = torch.logsumexp(logit_numerator * class_mask, 1, keepdim=True)
+        pos_logit = torch.logsumexp(
+            masked_logit(logit_numerator, class_mask), 1, keepdim=True
+        )
 
-        integrated_logit = pos_logit - logit_denominator
+        # integrated_logit = pos_logit - logit_denominator
 
-        return self.xe(integrated_logit, yq_new)
+        return self.xe(torch.cat([pos_logit, logit_denominator], 1), yq_new)
 
 
 # - Wrapper class for distributed training -#

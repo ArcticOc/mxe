@@ -14,7 +14,6 @@
             "args": [
                 "--nproc_per_node=4",
                 "train.py",
-                "--loss=PNLoss",
                 "--amp",
                 "--class-proxy",
                 "--projection",
