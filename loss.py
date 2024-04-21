@@ -131,9 +131,13 @@ class MultiXELoss(nn.Module):
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
 
-        loss = torch.logsumexp(logit, dim=-1) - torch.sum(
+        denominator = torch.logsumexp(logit, dim=-1)
+        temp = logit * class_mask
+        numerator = torch.sum(temp, dim=-1) / class_mask.sum(-1)
+        loss = denominator - numerator
+        """ loss = torch.logsumexp(logit, dim=-1) - torch.sum(
             logit * class_mask, dim=-1
-        ) / class_mask.sum(-1)
+        ) / class_mask.sum(-1) """
         return loss.mean()
 
 
@@ -262,13 +266,13 @@ class PNCALoss(nn.Module):
             )
 
         logit_numerator *= C > 0.1
-        logit_numerator = logit_numerator.unsqueeze(-1)
+        pos_logit = logit_numerator.unsqueeze(-1)
         # FewShotNCALoss logic for denominator
         logit = self.logit_func(xq, xs) / self.T
         neg_logit = torch.logsumexp(masked_logit(logit, ~class_mask), 1, keepdim=True)
 
         # Combine logit from PNCA as numerator and neg_logit from FewShotNCA as denominator
-        integrated_logit = torch.cat([logit_numerator, neg_logit], -1)
+        integrated_logit = torch.cat([pos_logit, neg_logit], -1)
 
         return self.xe(integrated_logit, yq_news)
 
@@ -290,15 +294,74 @@ class HMultiXELoss(nn.Module):
             pos = torch.tensor(pos)
             ind = torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
+            yq_new = torch.zeros_like(yq)
 
         logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
 
-        loss = torch.logsumexp(logit, dim=-1) - torch.sum(
-            logit * class_mask, dim=-1
-        ) / class_mask.sum(-1)
-        return loss.mean()
+        pos_logit = (
+            torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
+        ).unsqueeze(-1)
+        neg_logit = torch.logsumexp(masked_logit(logit, ~class_mask), 1, keepdim=True)
+
+        intergrated_logit = torch.cat([pos_logit, neg_logit], -1)
+        return self.xe(intergrated_logit, yq_new)
+        # loss = torch.logsumexp(logit, dim=-1) - torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
+        # return loss.mean()
+
+
+class PMXELoss(nn.Module):
+    def __init__(self, T=1.0, logit_func="l2_dist", **kwargs):
+        super(PMXELoss, self).__init__()
+        self.T = T
+        self.logit_func = logit_funcs[logit_func]
+        self.xe = nn.CrossEntropyLoss()
+
+    def forward(self, xq, yq, xs, ys, pos):
+        with torch.no_grad():
+            classes = ys.unique()
+            one_hot = ys.view(-1, 1) == classes
+            class_count = one_hot.sum(0, keepdim=True)
+            yq_new = one_hot[pos].nonzero()[:, 1]
+            yq_news = torch.zeros_like(yq)
+            class_mask = yq.view(-1, 1) == ys.view(1, -1)
+            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
+            pos = torch.tensor(pos)
+            ind = torch.arange(len(pos))
+            class_mask[ind[idx], pos[idx]] = False
+
+        mus = torch.mm(one_hot.t().float(), xs)  # #class x dim
+        M = mus.unsqueeze(0).repeat(len(yq), 1, 1)  # nq x #class x dim
+        M[torch.arange(len(yq)), yq_new] -= xq
+
+        C = class_count.repeat(len(yq), 1)  # nq x #class
+        C[torch.arange(len(yq)), yq_new] -= 1
+
+        if self.logit_func == l2_dist:
+            logit_denominator = (
+                -(xq.unsqueeze(1) - M / C.unsqueeze(-1).clamp(min=0.1))
+                .pow(2)
+                .sum(-1)
+                .sqrt()
+            )
+        elif self.logit_func == l1_dist:
+            logit_denominator = (
+                -(xq.unsqueeze(1) - M / C.unsqueeze(-1).clamp(min=0.1)).abs().sum(-1)
+            )
+
+        logit_denominator *= C > 0.1
+        neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
+        # FewShotNCALoss logic for denominator
+        logit = self.logit_func(xq, xs) / self.T
+        pos_logit = (
+            torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
+        ).unsqueeze(-1)
+
+        # Combine logit from PNCA as numerator and neg_logit from FewShotNCA as denominator
+        integrated_logit = torch.cat([pos_logit, neg_logit], -1)
+
+        return self.xe(integrated_logit, yq_news)
 
 
 # - Wrapper class for distributed training -#
