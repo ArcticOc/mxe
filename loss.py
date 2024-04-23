@@ -379,24 +379,17 @@ class PMXELoss(nn.Module):
             ind = torch.arange(len(pos))
 
         mus = torch.mm(one_hot.t().float(), xs)
-        query_class_sum = torch.zeros((len(classes), xq.size(1))).cuda()
-
-        for i, cls in enumerate(classes):
-            mask = yq == cls
-            query_class_sum[i, :] = xq[mask].sum(0)
-        M = mus[yq_new] - query_class_sum[yq_new]
-
-        yq_new_counts = torch.bincount(yq_new, minlength=len(classes))
-        C = counts.unsqueeze(-1)[yq_new, 0] - yq_new_counts[yq_new]
+        M = mus[yq_new] - xq
+        C = counts.unsqueeze(1)[yq_new, 0] - 1
         proto = M / C.unsqueeze(-1).clamp(min=0.1)
-
+        # PNCALoss logic for denominator
         if self.logit_func == l2_dist:
-            logit_numerator = -torch.cdist(xq, proto, p=2).diag()
+            logit_denominator = -torch.cdist(xq, proto, p=2).diag()
 
         elif self.logit_func == l1_dist:
-            logit_numerator = -torch.cdist(xq, proto, p=1).diag()
+            logit_denominator = -torch.cdist(xq, proto, p=1).diag()
 
-        pos_logit = logit_numerator.unsqueeze(-1)
+        pos_logit = logit_denominator.unsqueeze(-1)
 
         # FewShotNCALoss logic for numerator
         logit = self.logit_func(xq, xs) / self.T
@@ -413,7 +406,48 @@ class PMXELoss(nn.Module):
 
             summed_distances[:, i] = logit[:, class_mask_].sum(dim=1)
 
-        normalized_logit = summed_distances / counts.unsqueeze(0)
+        normalized_logit = summed_distances / (counts - 1)
+
+        neg_logit = torch.logsumexp(normalized_logit, 1, keepdim=True)
+
+        loss = neg_logit - pos_logit
+
+        return loss.mean()
+
+
+class NCAMLoss(nn.Module):
+    def __init__(self, T=1.0, logit_func="l2_dist", **kwargs):
+        super(NCAMLoss, self).__init__()
+        self.T = T
+        self.logit_func = logit_funcs[logit_func]
+        self.xe = nn.CrossEntropyLoss()
+
+    def forward(self, xq, yq, xs, ys, pos):
+        with torch.no_grad():
+            classes, counts = ys.unique(return_counts=True)
+            class_mask = yq.view(-1, 1) == ys.view(1, -1)
+            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
+            pos = torch.tensor(pos)
+            ind = torch.arange(len(pos))
+
+        # FewShotNCALoss logic for numerator
+        logit = self.logit_func(xq, xs) / self.T
+        logit[ind, pos] *= 0
+        logit[ind[idx], pos[idx]] -= INF
+
+        pos_logit = torch.logsumexp(masked_logit(logit, class_mask), 1, keepdim=True)
+
+        summed_distances = torch.zeros(
+            xq.size(0),
+            len(classes),
+        ).cuda()
+
+        for i, cls in enumerate(classes):
+            class_mask_ = ys == cls
+
+            summed_distances[:, i] = logit[:, class_mask_].sum(dim=1)
+
+        normalized_logit = summed_distances / (counts - 1)
 
         neg_logit = torch.logsumexp(normalized_logit, 1, keepdim=True)
 
