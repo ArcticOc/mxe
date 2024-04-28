@@ -18,6 +18,7 @@ def evaluate(
     print_freq=100,
     header="Val",
     writer=None,
+    loss=None,
 ):
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -28,7 +29,7 @@ def evaluate(
         train_avg = 0
         num = 0
         print("Train (stats)")
-        for image, target in data_loader_avg:
+        for image, _ in data_loader_avg:
             image = image.to(device, non_blocking=True)
             train_avg = train_avg + model(image)[0].mean(0)
             num += 1
@@ -38,10 +39,16 @@ def evaluate(
         # compute test-set embeddings
         test_embeddings, test_labels = [], []
         for image, target in metric_logger.log_every(data_loader, print_freq, header):
-            image = image.to(device, non_blocking=True)
-            target = target.to(device, non_blocking=True)
+            image, target = (
+                image.to(device, non_blocking=True),
+                target.to(device, non_blocking=True),
+            )
             output = model(image)[0]
-
+            if header in ("Val", "Val (EMA)"):
+                val_loss = loss(output, target)
+                writer.add_scalar(
+                    f"{header}_loss", val_loss.item(), epoch
+                ) if writer is not None else None
             batch_size = image.shape[0]
             num_processed_samples += batch_size
 

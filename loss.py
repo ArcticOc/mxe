@@ -122,7 +122,7 @@ class PPLoss(nn.Module):
 
 
 class MKLoss(nn.Module):
-    """Multi-label Loss function: M/K"""
+    """Multi-label Loss function: M/K ✦"""
 
     def __init__(self, T=1.0, logit="l2_dist", **kwargs):
         super().__init__()
@@ -137,21 +137,16 @@ class MKLoss(nn.Module):
         with torch.no_grad():
             class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos = torch.tensor(pos)
-            ind = torch.arange(len(pos))
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
 
         logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
 
-        denominator = torch.logsumexp(logit, dim=-1)
-        temp = logit * class_mask
-        numerator = torch.sum(temp, dim=-1) / class_mask.sum(-1)
-        loss = denominator - numerator
-        """ loss = torch.logsumexp(logit, dim=-1) - torch.sum(
+        loss = torch.logsumexp(logit, dim=-1) - torch.sum(
             logit * class_mask, dim=-1
-        ) / class_mask.sum(-1) """
+        ) / class_mask.sum(-1)
         return loss.mean()
 
 
@@ -171,8 +166,7 @@ class PKLoss(nn.Module):
             yq_new = one_hot[pos].nonzero()[:, 1]
             class_mask = yq.view(-1, 1) == ys.view(1, -1)
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos = torch.tensor(pos)
-            ind = torch.arange(len(pos))
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
 
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus[yq_new] - xq
@@ -216,8 +210,7 @@ class KPLoss(nn.Module):
             yq_new = one_hot[pos].nonzero()[:, 1]
             class_mask = yq.view(-1, 1) == ys.view(1, -1)
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos = torch.tensor(pos)
-            ind = torch.arange(len(pos))
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
 
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus[yq_new] - xq
@@ -234,7 +227,11 @@ class KPLoss(nn.Module):
             )
 
         elif self.logit_func == l1_dist:
-            logit_denominator = -torch.cdist(xq, proto, p=1)
+            logit_denominator_pos = -torch.cdist(xq, proto, p=1).diag()
+            logit_denominator = -torch.cdist(xq, proto_n, p=1)
+            logit_denominator[torch.arange(len(yq_new)), yq_new] = (
+                logit_denominator_pos  # nq x class
+            )
 
         neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
 
@@ -265,8 +262,7 @@ class MPLoss(nn.Module):
             yq_new = one_hot[pos].nonzero()[:, 1]
             class_mask = yq.view(-1, 1) == ys.view(1, -1)
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos = torch.tensor(pos)
-            ind = torch.arange(len(pos))
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
 
         mus = torch.mm(one_hot.t().float(), xs)
@@ -284,7 +280,11 @@ class MPLoss(nn.Module):
             )
 
         elif self.logit_func == l1_dist:
-            logit_denominator = -torch.cdist(xq, proto, p=1)
+            logit_denominator_pos = -torch.cdist(xq, proto, p=1).diag()
+            logit_denominator = -torch.cdist(xq, proto_n, p=1)
+            logit_denominator[torch.arange(len(yq_new)), yq_new] = (
+                logit_denominator_pos  # nq x class
+            )
 
         neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
 
@@ -315,8 +315,7 @@ class PMLoss(nn.Module):
             yq_new = one_hot[pos].nonzero()[:, 1]
             class_mask = yq.view(-1, 1) == ys.view(1, -1)
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos = torch.tensor(pos)
-            ind = torch.arange(len(pos))
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
 
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus[yq_new] - xq
@@ -371,8 +370,7 @@ class KMLoss(nn.Module):
             classes, counts = ys.unique(return_counts=True)
             class_mask = yq.view(-1, 1) == ys.view(1, -1)
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos = torch.tensor(pos)
-            ind = torch.arange(len(pos))
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
 
         # Numerator K logit
         logit = self.logit_func(xq, xs) / self.T
@@ -421,8 +419,7 @@ class MMLoss(nn.Module):
             classes, counts = ys.unique(return_counts=True)
             class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos = torch.tensor(pos)
-            ind = torch.arange(len(pos))
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
 
         logit = self.logit_func(xq, xs) / self.T

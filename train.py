@@ -25,6 +25,7 @@ from src.train_one_epoch import train_one_epoch
 
 def main(args):
     writer = SummaryWriter()
+
     if args.output_dir and not args.test_only:
         utils.mkdir(os.path.join(args.output_dir, "checkpoints"))
 
@@ -105,7 +106,12 @@ def main(args):
         if args.class_proxy
         else None,
     )
+    criterion_val = loss.WrapperLoss(
+        loss=getattr(loss, args.loss)(**vars(args)),
+        class_proxy=[args.num_classes, 640] if args.class_proxy else None,
+    )  # widths=[64, 160, 320, 640]
     criterion.to(device)
+    criterion_val.to(device)
 
     parameters = utils.set_weight_decay(
         model,
@@ -185,7 +191,7 @@ def main(args):
             optimizer,
             schedulers=[warmup_lr_scheduler, main_lr_scheduler],
             milestones=[args.lr_warmup_epochs],
-        )
+        )  # SequntialLR cause warnings.warn(EPOCH_DEPRECATION_WARNING, UserWarning)
     else:
         lr_scheduler = main_lr_scheduler
 
@@ -290,7 +296,7 @@ def main(args):
             args,
             model_ema,
             scaler,
-            writer=writer,
+            writer,
         )
 
         lr_scheduler.step()
@@ -303,10 +309,11 @@ def main(args):
                 args,
                 data_loader_avg,
                 data_loader_val,
+                writer=writer,
                 epoch=epoch,
                 device=device,
                 header="Val",
-                writer=writer,
+                loss=criterion_val,
             )
 
             if model_ema:
@@ -317,10 +324,11 @@ def main(args):
                     args,
                     data_loader_avg,
                     data_loader_val,
+                    writer=writer,
                     epoch=epoch,
                     device=device,
                     header="Val (EMA)",
-                    writer=writer,
+                    loss=criterion_val,
                 )
 
             if args.output_dir:

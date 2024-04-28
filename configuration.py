@@ -6,9 +6,11 @@ DEFAULT_VAL_RESIZE_SIZE = 84
 DEFAULT_VAL_CROP_SIZE = 84
 DEFAULT_TRAIN_CROP_SIZE = 84
 DEFAULT_MODEL = "resnet12"
+DEFAULT_PROJECTION = True
 DEFAULT_PROJECTION_FEAT_DIM = 128
 DEFAULT_MODEL_EMA_STEPS = 32
 DEFAULT_MODEL_EMA_DECAY = 0.99998
+DEFAULT_AMP = True
 DEFAULT_DEVICE = "cuda"
 DEFAULT_WORKERS = 16
 DEFAULT_BATCH_SIZE = 128
@@ -40,7 +42,7 @@ DEFAULT_RA_REPS = 3
 DEFAULT_INTERPOLATION = "bilinear"
 DEFAULT_WORLD_SIZE = 1
 DEFAULT_DIST_URL = "env://"
-DEFAULT_LOSS = "PNCALoss"
+DEFAULT_LOSS = "PKLoss"
 DEFAULT_LOGIT = "l2_dist"
 DEFAULT_LOGIT_TEMPERATURE = 1
 DEFAULT_NUM_NN = 1
@@ -50,6 +52,7 @@ DEFAULT_TEST_WAY = 5
 DEFAULT_TEST_QUERY = 15
 DEFAULT_SHOT = "1,5"
 DEFAULT_EVAL_NORM_TYPE = "CCOS"
+DEFAULT_CLASS_PROXY = True
 
 # Flags for actions
 
@@ -83,7 +86,8 @@ def get_args_parser(add_help=True):
     parser.add_argument("--model", default=DEFAULT_MODEL, type=str, help="model name")
     parser.add_argument(
         "--projection",
-        action="store_true",
+        default=DEFAULT_PROJECTION,
+        type=bool,
         help="Use projection network",
     )
     parser.add_argument(
@@ -111,7 +115,8 @@ def get_args_parser(add_help=True):
     )
     parser.add_argument(
         "--amp",
-        action="store_true",
+        default=DEFAULT_AMP,
+        type=bool,
         help="Use torch.cuda.amp for mixed precision training",
     )
     parser.add_argument(
@@ -326,7 +331,8 @@ def get_args_parser(add_help=True):
     )
     parser.add_argument(
         "--class-proxy",
-        action="store_true",
+        default=DEFAULT_CLASS_PROXY,
+        type=bool,
         help="Augment support set by trainable class centers",
     )
     parser.add_argument(

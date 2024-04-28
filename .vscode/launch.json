@@ -14,10 +14,7 @@
             "args": [
                 "--nproc_per_node=4",
                 "train.py",
-                "--amp",
-                "--class-proxy",
-                "--projection",
-                "--output-dir=result/PN/tier/debug"
+                "--output-dir=result/debug"
             ],
         }
     ]
