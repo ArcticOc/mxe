@@ -63,9 +63,9 @@ def train_one_epoch(
             writer.add_scalar("Loss/train", loss.item(), epoch * len(data_loader) + i)
             if hasattr(model.module, "proj1"):
                 layer = model.module.proj1
-                writer.add_scalar(
-                    "Avg_Gradients",
-                    layer.weight.grad.mean().item(),
+                writer.add_histogram(
+                    "Gradients",
+                    layer.weight.grad,
                     epoch * len(data_loader) + i,
                 )
 
