@@ -4,6 +4,7 @@ data/cifar_fs/*
 !data/cifar_fs/.gitkeep
 data/tiered_imagenet/*
 !data/tiered_imagenet/.gitkeep
+data/CUB_200_2011/*
 runs/*
 !runs/.gitkeep
 result/*
