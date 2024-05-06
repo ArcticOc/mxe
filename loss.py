@@ -169,9 +169,8 @@ class PKLoss(nn.Module):
 
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus[yq] - xq
-        # C = counts[yq] - 1
         C = counts[yq] - 1
-        proto = M / C.clamp(min=0.1)
+        proto = M / C.unsqueeze(-1).clamp(min=0.1)
 
         # Numerator P logit
         if self.logit_func == l2_dist:
@@ -214,7 +213,8 @@ class KPLoss(nn.Module):
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus[yq] - xq
         C = counts[yq] - 1
-        proto = M / C.clamp(min=0.1)
+
+        proto = M / C.unsqueeze(-1).clamp(min=0.1)
         proto_n = mus / counts.unsqueeze(-1).clamp(min=0.1)
 
         # Denominator K logit
@@ -270,7 +270,7 @@ class MPLoss(nn.Module):
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus[yq] - xq
         C = counts[yq] - 1
-        proto = M / C.clamp(min=0.1)
+        proto = M / C.unsqueeze(-1).clamp(min=0.1)
         proto_n = mus / counts.unsqueeze(-1).clamp(min=0.1)
 
         # Denominator P logit
@@ -321,7 +321,7 @@ class PMLoss(nn.Module):
         mus = torch.mm(one_hot.t().float(), xs)
         M = mus[yq] - xq
         C = counts[yq] - 1
-        proto = M / C.clamp(min=0.1)
+        proto = M / C.unsqueeze(-1).clamp(min=0.1)
         # Numerator P logit
         if self.logit_func == l2_dist:
             logit_numerator = -torch.cdist(xq, proto).diag()
