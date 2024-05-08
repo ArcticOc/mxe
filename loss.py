@@ -71,8 +71,11 @@ class KKLoss(nn.Module):
             pos = torch.tensor(pos)
             ind = torch.arange(len(pos))
             yq_new = torch.zeros_like(yq)
+            classes, counts = ys.unique(return_counts=True)
 
+        C = counts[ys]
         logit = self.logit_func(xq, xs) / self.T
+        # logit += torch.log(C.unsqueeze(-1))
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
         pos_logit = torch.logsumexp(masked_logit(logit, class_mask), 1, keepdim=True)
@@ -244,7 +247,7 @@ class KPLoss(nn.Module):
             keepdim=True,
         )
 
-        loss = neg_logit - pos_logit + torch.log(C.unsqueeze(-1))
+        loss = neg_logit - pos_logit + torch.log(C.unsqueeze(-1))  # 1/N
 
         return loss.mean()
 
