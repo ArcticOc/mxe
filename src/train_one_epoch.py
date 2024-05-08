@@ -41,7 +41,7 @@ def train_one_epoch(
             if args.clip_grad_norm is not None:
                 # we should unscale the gradients of optimizer's assigned params if do gradient clipping
                 scaler.unscale_(optimizer)
-                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+                nn.utils.clip_grad_norm_(model.module.parameters(), args.clip_grad_norm)
             scaler.step(optimizer)
             scaler.update()
         else:
@@ -63,11 +63,10 @@ def train_one_epoch(
             writer.add_scalar("Loss/train", loss.item(), epoch * len(data_loader) + i)
             if hasattr(model.module, "proj1"):
                 layer = model.module.proj1
-                """ writer.add_histogram(
+                writer.add_histogram(
                     "Gradients",
                     layer.weight.grad,
                     epoch * len(data_loader) + i,
-                ) """
-                print(layer.weight.grad.shape)
+                )
 
     return metric_logger
