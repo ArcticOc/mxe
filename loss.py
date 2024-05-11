@@ -56,7 +56,7 @@ class KKLoss(nn.Module):
         self.xe = nn.CrossEntropyLoss()
         self.T = T
 
-    def forward(self, xq, yq, xs, ys, pos):
+    def forward(self, xq, yq, xs, ys, pos, lamda):
         """
         Input args:
             xq - Feature vectors of query samples [num_q x dim]
@@ -73,16 +73,15 @@ class KKLoss(nn.Module):
             yq_new = torch.zeros_like(yq)
             classes, counts = ys.unique(return_counts=True)
 
-        C = counts[ys]
+        # C = counts[ys].repeat(len(yq), 1) - 1 * class_mask
         logit = self.logit_func(xq, xs) / self.T
-        # logit += torch.log(C.unsqueeze(-1))
+        # logit += torch.log(torch.reciprocal(C))
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
         pos_logit = torch.logsumexp(masked_logit(logit, class_mask), 1, keepdim=True)
         neg_logit = torch.logsumexp(masked_logit(logit, ~class_mask), 1, keepdim=True)
 
-        return self.xe(torch.cat([pos_logit, neg_logit], 1), yq_new)
-        # return -1 * torch.sum(pos_logit - total_logit).mean()
+        return self.xe(torch.cat([pos_logit, neg_logit], 1), yq_new) * lamda[0].item()
 
 
 class PPLoss(nn.Module):
@@ -97,7 +96,7 @@ class PPLoss(nn.Module):
         self.xe = nn.CrossEntropyLoss()
         self.T = T
 
-    def forward(self, xq, yq, xs, ys, pos):
+    def forward(self, xq, yq, xs, ys, pos, lamda):
         with torch.no_grad():
             classes = ys.unique()
             one_hot = ys.view(-1, 1) == classes  # ns x #class
@@ -121,7 +120,7 @@ class PPLoss(nn.Module):
 
         logit *= C > 0.1  # exclude empty class
 
-        return self.xe(logit / self.T, yq)
+        return self.xe(logit / self.T, yq) * lamda[1].item()
 
 
 class MKLoss(nn.Module):
@@ -568,7 +567,7 @@ class WrapperLoss(torch.nn.Module):
         else:
             self.class_proxy = None
 
-    def forward(self, local_embeddings, local_labels):
+    def forward(self, local_embeddings, local_labels, lamda=torch.tensor([1, 1])):
         local_labels.squeeze_()
         local_labels = local_labels.long()
 
@@ -588,4 +587,4 @@ class WrapperLoss(torch.nn.Module):
             batch_size * self.rank, batch_size * (self.rank + 1)
         ).tolist()
 
-        return self.loss(local_embeddings, local_labels, embeddings, labels, pos)
+        return self.loss(local_embeddings, local_labels, embeddings, labels, pos, lamda)

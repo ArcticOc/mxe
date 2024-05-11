@@ -32,8 +32,8 @@ def train_one_epoch(
         start_time = time.time()
         image, target = image.to(device), target.to(device)
         with torch.cuda.amp.autocast(enabled=scaler is not None):
-            output, output_fc = model(image)
-            loss = criterion(output, target)
+            output, output_fc, lamda = model(image)
+            loss = criterion(output, target, lamda)
 
         optimizer.zero_grad()
         if scaler is not None:
