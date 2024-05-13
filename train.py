@@ -20,7 +20,6 @@ import src.utils as utils
 from configuration import args
 from src.dataloader import load_data
 from src.evaluate import evaluate
-from src.mix_loss import MixLoss
 from src.train_one_epoch import train_one_epoch
 
 
@@ -101,22 +100,16 @@ def main(args):
     if args.distributed:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
-    criterion_a = loss.WrapperLoss(
-        loss=getattr(loss, args.loss[0])(**vars(args)),
-        class_proxy=[args.num_classes, args.projection_feat_dim]
-        if args.class_proxy
-        else None,
+    class_proxy = (
+        [args.num_classes, args.projection_feat_dim] if args.class_proxy else None
     )
-    criterion_b = loss.WrapperLoss(
-        loss=getattr(loss, args.loss[1])(**vars(args)),
-        class_proxy=[args.num_classes, args.projection_feat_dim]
-        if args.class_proxy
-        else None,
+
+    criterion = loss.WrapperLoss(
+        loss=getattr(loss, args.loss)(**vars(args)), class_proxy=class_proxy
     )
-    criterion = MixLoss(criterion_a, criterion_b)
 
     criterion_val = loss.WrapperLoss(
-        loss=getattr(loss, args.loss[0])(**vars(args)),
+        loss=getattr(loss, args.loss)(**vars(args)),
         class_proxy=[args.num_classes, 640] if args.class_proxy else None,
     )  # widths=[64, 160, 320, 640]
     criterion.to(device)
@@ -206,13 +199,9 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(
-            model, find_unused_parameters=True
-        )
+        model = torch.nn.parallel.DistributedDataParallel(model)
         if len([x for x in criterion.parameters()]) > 0:
-            criterion = torch.nn.parallel.DistributedDataParallel(
-                criterion, find_unused_parameters=True
-            )
+            criterion = torch.nn.parallel.DistributedDataParallel(criterion)
         model_without_ddp = model.module
 
     model_ema = None

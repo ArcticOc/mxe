@@ -42,7 +42,7 @@ DEFAULT_RA_REPS = 3
 DEFAULT_INTERPOLATION = "bilinear"
 DEFAULT_WORLD_SIZE = 1
 DEFAULT_DIST_URL = "env://"
-DEFAULT_LOSS = ["PPLoss", "PPLoss"]
+DEFAULT_LOSS = "KPLoss"
 DEFAULT_LOGIT = "l2_dist"
 DEFAULT_LOGIT_TEMPERATURE = 1
 DEFAULT_NUM_NN = 1
@@ -317,7 +317,6 @@ def get_args_parser(add_help=True):
         "--loss",
         default=DEFAULT_LOSS,
         type=str,
-        nargs="+",
         help="loss function (default: MultiXELoss)",
     )
     parser.add_argument(

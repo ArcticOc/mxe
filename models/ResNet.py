@@ -128,7 +128,6 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, widths[2], layers[2], stride=2)
         self.layer4 = self._make_layer(block, widths[3], layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        # self.a = nn.Parameter(torch.Tensor([0.5, 0.5]), requires_grad=True)
         if self.projection:
             self.proj1 = nn.Linear(widths[3] * block.expansion, feature_dim)
 
@@ -202,8 +201,6 @@ class ResNet(nn.Module):
 
         if self.training and self.projection:
             x = self.proj1(x)
-
-            return x, x1, torch.Tensor([0.5, 0.5])
 
         return x, x1
 
