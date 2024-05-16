@@ -1,8 +1,11 @@
 import torch
 
-a = torch.tensor([1, 2, 3])
-b = torch.tensor([4, 5, 6])
+# 创建形状为[128, 1]的张量
+tensor_a = torch.randn(128, 1)
 
-c = torch.max(a.max(), b.max())
+# 创建形状为[128]的张量
+tensor_b = torch.randn(128)
 
-print(c)
+c = tensor_a / tensor_b.unsqueeze(1)
+
+print(c.shape)

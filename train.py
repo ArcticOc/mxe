@@ -24,7 +24,10 @@ from src.train_one_epoch import train_one_epoch
 
 
 def main(args):
-    writer = SummaryWriter()
+    writer = SummaryWriter(
+        # f"./runs/{args.loss}_{args.data_path.split('/')[-1]}_{datetime.now().strftime('%b%d_%H%M')}"
+        f"./runs/{'_'.join(args.output_dir.split('/')[1:])}_{datetime.datetime.now().strftime('%b%d_%H%M')}"
+    )
 
     if args.output_dir and not args.test_only:
         utils.mkdir(os.path.join(args.output_dir, "checkpoints"))

@@ -33,8 +33,8 @@ def masked_logit(D, M):
 # - logit based on pair-wise distance -#
 def l2_dist(xq, xs):
     # return -torch.pow(torch.cdist(xq, xs), 2).div(2)
-    return -torch.pow(torch.cdist(xq, xs), 2)
-    # return -torch.cdist(xq, xs)
+    return -torch.cdist(xq, xs)
+    # return -torch.cdist(xq, xs).pow(2)
 
 
 def l1_dist(xq, xs):
@@ -71,7 +71,6 @@ class KKLoss(nn.Module):
             pos = torch.tensor(pos)
             ind = torch.arange(len(pos))
             yq_new = torch.zeros_like(yq)
-            classes, counts = ys.unique(return_counts=True)
 
         # C = counts[ys].repeat(len(yq), 1) - 1 * class_mask
         logit = self.logit_func(xq, xs) / self.T
@@ -141,18 +140,40 @@ class MKLoss(nn.Module):
     def forward(self, xq, yq, xs, ys, pos):
         # Class correspondence
         with torch.no_grad():
+            classes, counts = ys.unique(return_counts=True)
             class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
+            one_hot = ys.view(-1, 1) == classes
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
             pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
+
+        mus = torch.mm(one_hot.t().float(), xs)
+        M = mus[yq] - xq
+        C = counts[yq] - 1
+        proto = M / C.unsqueeze(-1).clamp(min=0.1)
+        proto_n = mus / counts.unsqueeze(-1).clamp(min=0.1)
+
+        d_xq_proto = -torch.cdist(
+            xq, proto
+        ).diag()  # distance to corresponding prototype for each query
 
         logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
 
-        loss = torch.logsumexp(logit, dim=-1) - torch.sum(
-            logit * class_mask, dim=-1
-        ) / class_mask.sum(-1)
+        logit_xq_proto = torch.cat(
+            (logit * class_mask, d_xq_proto.unsqueeze(-1)), dim=1
+        )
+        pos_logit = torch.sum(logit_xq_proto, dim=-1) / class_mask.sum(-1)
+
+        d_proto = -torch.cdist(xq, proto_n)
+        d_proto[torch.arange(len(yq)), yq] = (
+            d_xq_proto  # distance to all prototypes for each query
+        )
+
+        logit_proto = torch.cat((logit, d_proto), dim=1)
+        neg_logit = torch.logsumexp(logit_proto, 1, keepdim=True)
+        loss = neg_logit - pos_logit
         return loss.mean()
 
 
@@ -163,7 +184,6 @@ class PKLoss(nn.Module):
         super().__init__()
         self.T = T
         self.logit_func = logit_funcs[logit_func]
-        self.xe = nn.CrossEntropyLoss()
 
     def forward(self, xq, yq, xs, ys, pos):
         with torch.no_grad():
@@ -206,7 +226,6 @@ class KPLoss(nn.Module):
         super().__init__()
         self.T = T
         self.logit_func = logit_funcs[logit_func]
-        self.xe = nn.CrossEntropyLoss()
 
     def forward(self, xq, yq, xs, ys, pos):
         with torch.no_grad():
@@ -262,7 +281,6 @@ class MPLoss(nn.Module):
         super().__init__()
         self.T = T
         self.logit_func = logit_funcs[logit_func]
-        self.xe = nn.CrossEntropyLoss()
 
     def forward(self, xq, yq, xs, ys, pos):
         with torch.no_grad():
@@ -330,7 +348,7 @@ class PMLoss(nn.Module):
         proto = M / C.unsqueeze(-1).clamp(min=0.1)
         # Numerator P logit
         if self.logit_func == l2_dist:
-            logit_numerator = -torch.cdist(xq, proto).diag()
+            logit_numerator = -torch.cdist(xq, proto).pow(2).diag()
 
         logit_numerator *= C > 0.1
         pos_logit = logit_numerator.unsqueeze(-1)

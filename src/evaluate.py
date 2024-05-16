@@ -44,7 +44,7 @@ def evaluate(
                 target.to(device, non_blocking=True),
             )
             output = model(image)[0]
-            if header in ("Val", "Val (EMA)"):
+            if header in ("Val", "Val (EMA)") and eval_params.test_only is not True:
                 val_loss = loss(output, target)
                 writer.add_scalar(
                     f"{header}_loss", val_loss.item(), epoch
