@@ -164,7 +164,7 @@ class MKLoss(nn.Module):
         logit_xq_proto = torch.cat(
             (logit * class_mask, d_xq_proto.unsqueeze(-1)), dim=1
         )
-        pos_logit = torch.sum(logit_xq_proto, dim=-1) / class_mask.sum(-1)
+        pos_logit = torch.sum(logit_xq_proto, dim=-1) / (class_mask.sum(-1) + 1)
 
         d_proto = -torch.cdist(xq, proto_n)
         d_proto[torch.arange(len(yq)), yq] = (
