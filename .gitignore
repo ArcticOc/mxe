@@ -12,3 +12,5 @@ result/*
 */__pycache__/*
 *.*.pyc
 *.pyc
+*.png
+tsne/*

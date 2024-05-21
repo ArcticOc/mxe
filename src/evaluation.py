@@ -202,16 +202,14 @@ def extract_feature(train_loader, val_loader, model, args):
     """
 
     # We use the FC layer of the model only if we are combining XENT with NCA loss
-    use_fc = args.xent_weight > 0
+    use_fc, cat = False, False
     print("\n>> Extracting statistics from training set embeddings")
     model.eval()
     with torch.no_grad():
         # get training mean
         out_mean, fc_out_mean = [], []
         for i, (inputs, _) in enumerate(train_loader):
-            outputs, fc_outputs = model(
-                inputs, use_fc=use_fc, cat=args.multi_layer_eval
-            )
+            outputs, fc_outputs = model(inputs, use_fc=use_fc, cat=cat)
             outputs_np = outputs.cpu().data.numpy()
             out_mean.append(outputs_np)
             if fc_outputs is not None:

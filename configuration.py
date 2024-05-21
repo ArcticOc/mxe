@@ -29,7 +29,7 @@ DEFAULT_LR_WARMUP_DECAY = 0.033
 DEFAULT_CLIP_GRAD_NORM = None
 DEFAULT_BACKEND = "PIL"
 DEFAULT_CLASS_AWARE_SAMPLER = None
-DEFAULT_OUTPUT_DIR = "result/result"
+DEFAULT_OUTPUT_DIR = None
 DEFAULT_RESUME = ""
 DEFAULT_PRINT_FREQ = 10
 DEFAULT_VAL_FREQ = 5
@@ -42,8 +42,8 @@ DEFAULT_RA_REPS = 3
 DEFAULT_INTERPOLATION = "bilinear"
 DEFAULT_WORLD_SIZE = 1
 DEFAULT_DIST_URL = "env://"
-DEFAULT_LOSS = "MKLoss"
-DEFAULT_LOGIT = "l2_dist"
+DEFAULT_LOSS = "AProxy"
+DEFAULT_LOGIT = "l1_dist"
 DEFAULT_LOGIT_TEMPERATURE = 1
 DEFAULT_NUM_NN = 1
 DEFAULT_TEST_ITER = 10000
@@ -52,7 +52,6 @@ DEFAULT_TEST_WAY = 5
 DEFAULT_TEST_QUERY = 15
 DEFAULT_SHOT = "1,5"
 DEFAULT_EVAL_NORM_TYPE = "CCOS"
-DEFAULT_CLASS_PROXY = True
 
 # Flags for actions
 
@@ -331,8 +330,7 @@ def get_args_parser(add_help=True):
     )
     parser.add_argument(
         "--class-proxy",
-        default=DEFAULT_CLASS_PROXY,
-        type=bool,
+        action="store_true",
         help="Augment support set by trainable class centers",
     )
     parser.add_argument(
@@ -391,6 +389,11 @@ def get_args_parser(add_help=True):
         "--disable-nearest-mean-classifier",
         action="store_true",
         help="not use nearest-mean classifier",
+    )
+    parser.add_argument(
+        "--tsne",
+        action="store_true",
+        help="visualize features with t-SNE",
     )
 
     return parser

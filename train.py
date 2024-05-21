@@ -21,12 +21,17 @@ from configuration import args
 from src.dataloader import load_data
 from src.evaluate import evaluate
 from src.train_one_epoch import train_one_epoch
+from src.tSNE import TSNEVisualizer
 
 
 def main(args):
-    writer = SummaryWriter(
-        # f"./runs/{args.loss}_{args.data_path.split('/')[-1]}_{datetime.now().strftime('%b%d_%H%M')}"
-        f"./runs/{'_'.join(args.output_dir.split('/')[1:])}_{datetime.datetime.now().strftime('%b%d_%H%M')}"
+    writer = (
+        SummaryWriter(
+            # f"./runs/{args.loss}_{args.data_path.split('/')[-1]}_{datetime.now().strftime('%b%d_%H%M')}"
+            f"./runs/{'_'.join(args.output_dir.split('/')[1:])}_{datetime.datetime.now().strftime('%b%d_%H%M')}"
+        )
+        if args.output_dir
+        else None
     )
 
     if args.output_dir and not args.test_only:
@@ -103,20 +108,20 @@ def main(args):
     if args.distributed:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
-    class_proxy = (
+    class_proxy_ = (
         [args.num_classes, args.projection_feat_dim] if args.class_proxy else None
     )
 
     criterion = loss.WrapperLoss(
-        loss=getattr(loss, args.loss)(**vars(args)), class_proxy=class_proxy
+        loss=getattr(loss, args.loss)(**vars(args)), class_proxy=class_proxy_
     )
 
-    criterion_val = loss.WrapperLoss(
+    """ criterion_val = loss.WrapperLoss(
         loss=getattr(loss, args.loss)(**vars(args)),
         class_proxy=[args.num_classes, 640] if args.class_proxy else None,
-    )  # widths=[64, 160, 320, 640]
+    )  # widths=[64, 160, 320, 640] """
     criterion.to(device)
-    criterion_val.to(device)
+    # criterion_val.to(device)
 
     parameters = utils.set_weight_decay(
         model,
@@ -233,7 +238,11 @@ def main(args):
             model_ema.load_state_dict(checkpoint["model_ema"])
         if scaler:
             scaler.load_state_dict(checkpoint["scaler"])
+    if args.tsne:
+        tSNE = TSNEVisualizer(data_loader_val, model, args)
+        tSNE.visualize_with_tsne()
 
+        return print("t-SNE visualization is saved.")
     if args.test_only:
         # We disable the cudnn benchmarking because it can noticeably affect the accuracy
         torch.backends.cudnn.benchmark = False
@@ -318,7 +327,6 @@ def main(args):
                 epoch=epoch,
                 device=device,
                 header="Val",
-                loss=criterion_val,
             )
 
             if model_ema:
@@ -333,7 +341,6 @@ def main(args):
                     epoch=epoch,
                     device=device,
                     header="Val (EMA)",
-                    loss=criterion_val,
                 )
 
             if args.output_dir:

@@ -44,11 +44,11 @@ def evaluate(
                 target.to(device, non_blocking=True),
             )
             output = model(image)[0]
-            if header in ("Val", "Val (EMA)") and eval_params.test_only is not True:
-                val_loss = loss(output, target)
-                writer.add_scalar(
-                    f"{header}_loss", val_loss.item(), epoch
-                ) if writer is not None else None
+            # if header in ("Val", "Val (EMA)") and eval_params.test_only is not True:
+            #     val_loss = loss(output, target)
+            #     writer.add_scalar(
+            #         f"{header}_loss", val_loss.item(), epoch
+            #     ) if writer is not None else None
             batch_size = image.shape[0]
             num_processed_samples += batch_size
 

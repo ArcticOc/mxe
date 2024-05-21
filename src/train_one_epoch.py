@@ -61,12 +61,12 @@ def train_one_epoch(
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
         if writer is not None:
             writer.add_scalar("Loss/train", loss.item(), epoch * len(data_loader) + i)
-            if hasattr(model.module, "proj1"):
+            """ if hasattr(model.module, "proj1"):
                 layer = model.module.proj1
                 writer.add_histogram(
                     "Gradients",
                     layer.weight.grad,
                     epoch * len(data_loader) + i,
-                )
+                ) """
 
     return metric_logger
