@@ -13,4 +13,4 @@
 # torchrun --nproc_per_node=4 --master_port=35768 train.py --loss=MKLoss --logit=l2_dist --class-proxy --output-dir=result/l2cp/MK
 # torchrun --nproc_per_node=4 --master_port=35768 train.py --loss=MKLoss --logit=l1_dist --output-dir=result/l1wcp/MK
 # torchrun --nproc_per_node=4 --master_port=35768 train.py --loss=MKLoss --logit=l2_dist --output-dir=result/l2wcp/MK
-torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l2_dist --resume=result/l2wcp/KK/checkpoints/best_shot5_model.pth --tsne
+torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l2_dist --resume=result/l2wcp/MK/checkpoints/best_shot5_model.pth --tsne
