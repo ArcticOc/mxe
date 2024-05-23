@@ -5,6 +5,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
+# from openTSNE import TSNE
 # from umap import UMAP
 # from sklearn.neighbors import LocalOutlierFactor
 from sklearn.manifold import TSNE
@@ -45,6 +46,9 @@ class Filter:
         self.filtered_labels = self.labels[mask]
         return self.filtered_features, self.filtered_labels
 
+    def original(self):
+        return self.features, self.labels
+
     def filter(self, n=None, method="if"):
         if method == "if":
             return self.filter_if(n=n if n is not None else 0.1)
@@ -52,6 +56,8 @@ class Filter:
             return self.filter_zscores(n=n if n is not None else 4)
         elif method == "lof":
             return self.filter_lof(n=n if n is not None else 15)
+        elif method == "original":
+            return self.original()
         else:
             raise ValueError("Invalid method")
 
@@ -114,13 +120,16 @@ class TSNEVisualizer:
                 method="exact",
                 n_iter=1500,
                 random_state=0,
-                perplexity=120,
-                learning_rate=10,
+                perplexity=100,
+                early_exaggeration=20,
+                learning_rate=20,
+                n_jobs=8,
+                verbose=True,
             )
 
             features_tsne = tsne.fit_transform(features)
             filter = Filter(features_tsne, labels)
-            filtered_features_tsne, filtered_labels = filter.filter(n=100, method="lof")
+            filtered_features_tsne, filtered_labels = filter.filter(n=120, method="lof")
 
             plt.figure(figsize=(10, 6))
             unique_labels = np.unique(labels)
