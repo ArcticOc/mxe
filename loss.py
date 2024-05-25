@@ -111,13 +111,9 @@ class PPLoss(nn.Module):
         C[torch.arange(len(yq)), yq_new] -= 1
 
         if self.logit_func == l2_dist:
-            logit = -0.5 * (xq.unsqueeze(1) - M / C.unsqueeze(-1).clamp(min=0.1)).pow(
-                2
-            ).sum(-1)  # nq x #class
+            logit = -0.5 * (xq.unsqueeze(1) - M / C.unsqueeze(-1).clamp(min=0.1)).pow(2).sum(-1)  # nq x #class
         elif self.logit_func == l1_dist:
-            logit = (
-                -(xq.unsqueeze(1) - M / C.unsqueeze(-1).clamp(min=0.1)).abs().sum(-1)
-            )
+            logit = -(xq.unsqueeze(1) - M / C.unsqueeze(-1).clamp(min=0.1)).abs().sum(-1)
         logit *= C > 0.1  # exclude empty class
 
         return self.xe(logit / self.T, yq_new)
@@ -146,9 +142,7 @@ class MKLoss(nn.Module):
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
 
-        loss = torch.logsumexp(logit, dim=-1) - torch.sum(
-            logit * class_mask, dim=-1
-        ) / class_mask.sum(-1)
+        loss = torch.logsumexp(logit, dim=-1) - torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
         return loss.mean()
 
 
@@ -222,16 +216,12 @@ class KPLoss(nn.Module):
         if self.logit_func == l2_dist:
             logit_denominator_pos = -torch.cdist(xq, proto).diag()
             logit_denominator = -torch.cdist(xq, proto_n)
-            logit_denominator[torch.arange(len(yq)), yq_new] = (
-                logit_denominator_pos  # nq x class
-            )
+            logit_denominator[torch.arange(len(yq)), yq_new] = logit_denominator_pos  # nq x class
 
         elif self.logit_func == l1_dist:
             logit_denominator_pos = -torch.cdist(xq, proto, p=1).diag()
             logit_denominator = -torch.cdist(xq, proto_n, p=1)
-            logit_denominator[torch.arange(len(yq)), yq] = (
-                logit_denominator_pos  # nq x class
-            )
+            logit_denominator[torch.arange(len(yq)), yq] = logit_denominator_pos  # nq x class
 
         neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
 
@@ -277,16 +267,12 @@ class MPLoss(nn.Module):
         if self.logit_func == l2_dist:
             logit_denominator_pos = -torch.cdist(xq, proto).diag()
             logit_denominator = -torch.cdist(xq, proto_n)
-            logit_denominator[torch.arange(len(yq)), yq] = (
-                logit_denominator_pos  # nq x class
-            )
+            logit_denominator[torch.arange(len(yq)), yq] = logit_denominator_pos  # nq x class
 
         elif self.logit_func == l1_dist:
             logit_denominator_pos = -torch.pow(torch.cdist(xq, proto), 2).diag()
             logit_denominator = -torch.cdist(xq, proto_n, p=1)
-            logit_denominator[torch.arange(len(yq)), yq] = (
-                logit_denominator_pos  # nq x class
-            )
+            logit_denominator[torch.arange(len(yq)), yq] = logit_denominator_pos  # nq x class
 
         neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
 
@@ -445,9 +431,7 @@ class MMLoss(nn.Module):
         neg_logit = torch.logsumexp(normalized_logit, 1, keepdim=True)
 
         # Denominator M logit
-        pos_logit = (
-            torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
-        ).unsqueeze(-1)
+        pos_logit = (torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)).unsqueeze(-1)
 
         loss = neg_logit - pos_logit
 
@@ -537,9 +521,7 @@ class AsymmetricLoss(BCELoss):
             pt0 = xs_pos * one_hot_yq
             pt1 = xs_neg * (~one_hot_yq)  # pt = p if t > 0 else 1-p
             pt = pt0 + pt1
-            one_sided_gamma = self.gamma_pos * one_hot_yq + self.gamma_neg * (
-                ~one_hot_yq
-            )
+            one_sided_gamma = self.gamma_pos * one_hot_yq + self.gamma_neg * (~one_hot_yq)
             one_sided_w = torch.pow((1 - pt).clamp(min=0), one_sided_gamma)
             if self.disable_torch_grad_focal_loss:
                 torch.set_grad_enabled(True)
@@ -562,13 +544,15 @@ class AProxy(nn.Module):
             classes = torch.arange(64).cuda()  # nq x ns
             one_hot = yq.view(-1, 1) == classes
 
-        logit = F.normalize(-torch.cdist(xq, self.proxies))
+        xq = F.normalize(xq, p=2, dim=-1)
+        self.proxies = nn.Parameter(F.normalize(self.proxies, p=2, dim=-1))
+        logit = -torch.cdist(xq, self.proxies)
         pos_logit = torch.logsumexp(masked_logit(-logit, one_hot), 0, keepdim=True)
         neg_logit = torch.logsumexp(masked_logit(logit, ~one_hot), 0, keepdim=True)
         num_pos = one_hot.sum(0).nonzero().size(0)
 
-        pos = torch.log(1 + pos_logit.clamp(min=0)).sum() / num_pos
-        neg = torch.log(1 + neg_logit).sum() / 64
+        pos = torch.log(1 + torch.exp(pos_logit.clamp(min=0))).sum() / num_pos
+        neg = torch.log(1 + torch.exp(neg_logit)).mean()
 
         loss = pos + neg
 
@@ -609,6 +593,40 @@ class KProxy(nn.Module):
         return loss
 
 
+class MKPLoss(nn.Module):
+    """Multi-label Loss function: M/K ✦"""
+
+    def __init__(self, T=1.0, logit="l2_dist", **kwargs):
+        super().__init__()
+
+        # Logit function
+        self.logit_func = logit_funcs[logit]
+        self.T = T
+
+    def forward(self, xq, yq, xs, ys, pos):
+        # Class correspondence
+        with torch.no_grad():
+            class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
+            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
+            pos, ind = torch.tensor(pos), torch.arange(len(pos))
+            class_mask[ind[idx], pos[idx]] = False
+
+        # xq, xs = F.normalize(xq, p=2, dim=-1), F.normalize(xs, p=2, dim=-1)
+        logit = self.logit_func(xq, xs) / self.T
+
+        logit[ind, pos] *= 0
+        logit[ind[idx], pos[idx]] -= INF
+
+        pos_si = torch.sum(-logit * class_mask, dim=-1) / class_mask.sum(-1)
+        neg_sj = logit * ~class_mask
+
+        pos_ = torch.log(1 + torch.exp(pos_si).sum())
+        neg_ = torch.log(1 + torch.exp(neg_sj).sum())
+
+        loss = pos_ + neg_
+        return loss
+
+
 # - Wrapper class for distributed training -#
 class WrapperLoss(torch.nn.Module):
     def __init__(self, loss, class_proxy=None):
@@ -637,13 +655,9 @@ class WrapperLoss(torch.nn.Module):
 
         if self.class_proxy is not None:
             embeddings = torch.cat([embeddings, self.class_proxy])
-            class_labels = torch.arange(
-                self.class_proxy.size(0), dtype=labels.dtype, device=labels.device
-            )
+            class_labels = torch.arange(self.class_proxy.size(0), dtype=labels.dtype, device=labels.device)
             labels = torch.cat([labels, class_labels])
 
-        pos = torch.arange(
-            batch_size * self.rank, batch_size * (self.rank + 1)
-        ).tolist()
+        pos = torch.arange(batch_size * self.rank, batch_size * (self.rank + 1)).tolist()
 
         return self.loss(local_embeddings, local_labels, embeddings, labels, pos)

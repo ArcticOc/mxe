@@ -43,7 +43,7 @@ DEFAULT_INTERPOLATION = "bilinear"
 DEFAULT_WORLD_SIZE = 1
 DEFAULT_DIST_URL = "env://"
 DEFAULT_LOSS = "AProxy"
-DEFAULT_LOGIT = "l1_dist"
+DEFAULT_LOGIT = "l2_dist"
 DEFAULT_LOGIT_TEMPERATURE = 1
 DEFAULT_NUM_NN = 1
 DEFAULT_TEST_ITER = 10000
@@ -57,13 +57,9 @@ DEFAULT_EVAL_NORM_TYPE = "CCOS"
 
 
 def get_args_parser(add_help=True):
-    parser = argparse.ArgumentParser(
-        description="PyTorch Few-Shot Training", add_help=add_help
-    )
+    parser = argparse.ArgumentParser(description="PyTorch Few-Shot Training", add_help=add_help)
 
-    parser.add_argument(
-        "--data-path", default=DEFAULT_DATA_PATH, type=str, help="dataset path"
-    )
+    parser.add_argument("--data-path", default=DEFAULT_DATA_PATH, type=str, help="dataset path")
     parser.add_argument(
         "--val-resize-size",
         default=DEFAULT_VAL_RESIZE_SIZE,
@@ -147,12 +143,8 @@ def get_args_parser(add_help=True):
         help="number of total epochs to run",
     )
     parser.add_argument("--opt", default=DEFAULT_OPTIMIZER, type=str, help="optimizer")
-    parser.add_argument(
-        "--lr", default=DEFAULT_LR, type=float, help="initial learning rate"
-    )
-    parser.add_argument(
-        "--momentum", default=DEFAULT_MOMENTUM, type=float, metavar="M", help="momentum"
-    )
+    parser.add_argument("--lr", default=DEFAULT_LR, type=float, help="initial learning rate")
+    parser.add_argument("--momentum", default=DEFAULT_MOMENTUM, type=float, metavar="M", help="momentum")
     parser.add_argument(
         "--wd",
         "--weight-decay",
@@ -228,15 +220,9 @@ def get_args_parser(add_help=True):
         type=str,
         help="path to save outputs",
     )
-    parser.add_argument(
-        "--resume", default=DEFAULT_RESUME, type=str, help="path of checkpoint"
-    )
-    parser.add_argument(
-        "--print-freq", default=DEFAULT_PRINT_FREQ, type=int, help="print frequency"
-    )
-    parser.add_argument(
-        "--val-freq", default=DEFAULT_VAL_FREQ, type=int, help="validation frequency"
-    )
+    parser.add_argument("--resume", default=DEFAULT_RESUME, type=str, help="path of checkpoint")
+    parser.add_argument("--print-freq", default=DEFAULT_PRINT_FREQ, type=int, help="print frequency")
+    parser.add_argument("--val-freq", default=DEFAULT_VAL_FREQ, type=int, help="validation frequency")
     parser.add_argument(
         "--start-epoch",
         default=DEFAULT_START_EPOCH,
@@ -318,9 +304,7 @@ def get_args_parser(add_help=True):
         type=str,
         help="loss function (default: MultiXELoss)",
     )
-    parser.add_argument(
-        "--logit", default=DEFAULT_LOGIT, type=str, help="logit type (default: l1_dist)"
-    )
+    parser.add_argument("--logit", default=DEFAULT_LOGIT, type=str, help="logit type (default: l1_dist)")
     parser.add_argument(
         "--logit-temperature",
         default=DEFAULT_LOGIT_TEMPERATURE,

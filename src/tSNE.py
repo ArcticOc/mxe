@@ -1,6 +1,5 @@
 import collections
 import os
-from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -49,7 +48,7 @@ class Filter:
     def original(self):
         return self.features, self.labels
 
-    def filter(self, n=None, method="if"):
+    def __call__(self, n=None, method="if"):
         if method == "if":
             return self.filter_if(n=n if n is not None else 0.1)
         elif method == "zscore":
@@ -113,44 +112,51 @@ class TSNEVisualizer:
         features = np.array(new_features)
         labels = np.array(new_labels)
 
-        for i in range(3, 4):
-            filename = f"tsne/mxe/rank_{self.rank}/lof_{5*i}_{datetime.now().strftime('%H%M%S')}.png"
-            tsne = TSNE(
-                n_components=2,
-                method="exact",
-                n_iter=1500,
-                random_state=0,
-                perplexity=100,
-                early_exaggeration=20,
-                learning_rate=20,
-                n_jobs=8,
-                verbose=True,
-            )
-
-            features_tsne = tsne.fit_transform(features)
-            filter = Filter(features_tsne, labels)
-            filtered_features_tsne, filtered_labels = filter.filter(n=120, method="lof")
-
-            plt.figure(figsize=(10, 6))
-            unique_labels = np.unique(labels)
-            selected_labels = unique_labels[:tsne_class]
-            for label in selected_labels:
-                idx = filtered_labels == label
-                plt.scatter(
-                    filtered_features_tsne[idx, 0],
-                    filtered_features_tsne[idx, 1],
-                    label=label,
-                    alpha=0.6,
+        for i in range(12, 25):
+            for k in range(10, 33):
+                os.makedirs(f"tsne/comp_2/rank_{self.rank}/perp_{i*3}", exist_ok=True)
+                filename = f"tsne/comp_2/rank_{self.rank}/perp_{i*3}/comp_{k*3}.png"
+                # filename = f"tsne/mxe/rank_{self.rank}/lof_40_{datetime.now().strftime('%H%M%S')}.png"
+                tsne = TSNE(
+                    n_components=2,
+                    method="exact",
+                    n_iter=1500,
+                    random_state=0,
+                    perplexity=i * 3,
+                    early_exaggeration=15,
+                    learning_rate=20,
+                    n_jobs=24,
+                    verbose=True,
+                    init="pca",
                 )
 
-            # plt.title(title)
-            # plt.axis("off")
-            plt.xlabel("t-SNE feature 1")
-            plt.ylabel("t-SNE feature 2")
-            plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
-            plt.savefig(filename)
-            plt.show()
-            print(f"Saved t-SNE plot at {filename}")
+                features_tsne = tsne.fit_transform(features)
+                filter = Filter(features_tsne, labels)
+                filtered_features_tsne, filtered_labels = filter(n=k * 3, method="lof")
+
+                plt.figure(figsize=(10, 6))
+                cmap = plt.get_cmap('tab20')
+
+                unique_labels = np.unique(labels)
+                selected_labels = unique_labels[:tsne_class]
+                for label in selected_labels:
+                    idx = filtered_labels == label
+                    plt.scatter(
+                        filtered_features_tsne[idx, 0],
+                        filtered_features_tsne[idx, 1],
+                        c=[cmap(label / len(selected_labels))],
+                        label=label,
+                        alpha=0.8,
+                    )
+
+                # plt.title(title)
+                # plt.axis("off")
+                plt.xlabel("t-SNE feature 1")
+                plt.ylabel("t-SNE feature 2")
+                plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+                plt.savefig(filename)
+                plt.show()
+                print(f"Saved t-SNE plot at {filename}")
 
         """ for i in range(2, 3):  # 2, 15
             filename = f"tsne/nca/rank_{self.rank}/ucomponents_{datetime.now().strftime('%H%M%S')}.png"
