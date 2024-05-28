@@ -1,5 +1,6 @@
 import collections
 import os
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -112,17 +113,17 @@ class TSNEVisualizer:
         features = np.array(new_features)
         labels = np.array(new_labels)
 
-        for i in range(12, 25):
-            for k in range(10, 33):
-                os.makedirs(f"tsne/comp_2/rank_{self.rank}/perp_{i*3}", exist_ok=True)
-                filename = f"tsne/comp_2/rank_{self.rank}/perp_{i*3}/comp_{k*3}.png"
-                # filename = f"tsne/mxe/rank_{self.rank}/lof_40_{datetime.now().strftime('%H%M%S')}.png"
+        for i in range(12, 13):
+            for k in range(10, 11):
+                # os.makedirs(f"tsne/comp_2/rank_{self.rank}/perp_{i*3}", exist_ok=True)
+                # filename = f"tsne/comp_2/rank_{self.rank}/perp_{i*3}/comp_{k*3}.png"
+                filename = f"tsne/mxe/rank_{self.rank}/lof_60_{datetime.now().strftime('%H%M%S')}.png"
                 tsne = TSNE(
                     n_components=2,
                     method="exact",
                     n_iter=1500,
                     random_state=0,
-                    perplexity=i * 3,
+                    perplexity=60,
                     early_exaggeration=15,
                     learning_rate=20,
                     n_jobs=24,
@@ -132,7 +133,7 @@ class TSNEVisualizer:
 
                 features_tsne = tsne.fit_transform(features)
                 filter = Filter(features_tsne, labels)
-                filtered_features_tsne, filtered_labels = filter(n=k * 3, method="lof")
+                filtered_features_tsne, filtered_labels = filter(n=60, method="lof")
 
                 plt.figure(figsize=(10, 6))
                 cmap = plt.get_cmap('tab20')
