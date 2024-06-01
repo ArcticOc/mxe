@@ -16,8 +16,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 import loss
 import models
-import src.utils as utils
 from configuration import args
+from src import utils
 from src.dataloader import load_data
 from src.evaluate import evaluate
 from src.train_one_epoch import train_one_epoch
@@ -58,9 +58,7 @@ def main(args):
         train_avg_sampler,
         val_sampler,
         test_sampler,
-    ) = load_data(
-        *[os.path.join(args.data_path, x) for x in ["train", "val", "test"]], args
-    )
+    ) = load_data(*[os.path.join(args.data_path, x) for x in ["train", "val", "test"]], args)
 
     args.num_classes = len(dataset.classes)
     collate_fn = default_collate
@@ -108,13 +106,9 @@ def main(args):
     if args.distributed:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
-    class_proxy_ = (
-        [args.num_classes, args.projection_feat_dim] if args.class_proxy else None
-    )
+    class_proxy_ = [args.num_classes, args.projection_feat_dim] if args.class_proxy else None
 
-    criterion = loss.WrapperLoss(
-        loss=getattr(loss, args.loss)(**vars(args)), class_proxy=class_proxy_
-    )
+    criterion = loss.WrapperLoss(loss=getattr(loss, args.loss)(**vars(args)), class_proxy=class_proxy_)
 
     """ criterion_val = loss.WrapperLoss(
         loss=getattr(loss, args.loss)(**vars(args)),
@@ -151,29 +145,21 @@ def main(args):
             alpha=0.9,
         )
     elif opt_name == "adam":
-        optimizer = torch.optim.Adam(
-            parameters, lr=args.lr, weight_decay=args.weight_decay
-        )
+        optimizer = torch.optim.Adam(parameters, lr=args.lr, weight_decay=args.weight_decay)
     else:
-        raise RuntimeError(
-            f"Invalid optimizer {args.opt}. Only SGD, RMSprop and AdamW are supported."
-        )
+        raise RuntimeError(f"Invalid optimizer {args.opt}. Only SGD, RMSprop and AdamW are supported.")
 
     scaler = torch.cuda.amp.GradScaler() if args.amp else None
 
     args.lr_scheduler = args.lr_scheduler.lower()
     if args.lr_scheduler == "steplr":
-        main_lr_scheduler = torch.optim.lr_scheduler.StepLR(
-            optimizer, step_size=args.lr_step_size, gamma=args.lr_gamma
-        )
+        main_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step_size, gamma=args.lr_gamma)
     elif args.lr_scheduler == "cosineannealinglr":
         main_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=args.epochs - args.lr_warmup_epochs, eta_min=args.lr_min
         )
     elif args.lr_scheduler == "exponentiallr":
-        main_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            optimizer, gamma=args.lr_gamma
-        )
+        main_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.lr_gamma)
     else:
         raise RuntimeError(
             f"Invalid lr scheduler '{args.lr_scheduler}'. Only StepLR, CosineAnnealingLR and ExponentialLR "
@@ -223,9 +209,7 @@ def main(args):
         adjust = args.world_size * args.batch_size * args.model_ema_steps / args.epochs
         alpha = 1.0 - args.model_ema_decay
         alpha = min(1.0, alpha * adjust)
-        model_ema = utils.ExponentialMovingAverage(
-            model_without_ddp, device=device, decay=1.0 - alpha
-        )
+        model_ema = utils.ExponentialMovingAverage(model_without_ddp, device=device, decay=1.0 - alpha)
 
     if args.resume:
         checkpoint = torch.load(args.resume, map_location="cpu")
@@ -353,9 +337,7 @@ def main(args):
                     **{k: meter.meters[k].global_avg for k in meter.meters.keys()},  # noqa: SIM118
                 }
                 for s in args.shot:
-                    metric_logger.meters[f"best_shot{s}"].update(
-                        meter.meters[f"shot{s}_acc"].global_avg
-                    )
+                    metric_logger.meters[f"best_shot{s}"].update(meter.meters[f"shot{s}_acc"].global_avg)
                 if model_ema:
                     checkpoint["model_ema"] = model_ema.state_dict()
                     checkpoint.update(
@@ -365,9 +347,7 @@ def main(args):
                         }
                     )
                     for s in args.shot:
-                        metric_logger.meters[f"best_shot{s}"].update(
-                            meter_ema.meters[f"shot{s}_acc"].global_avg
-                        )
+                        metric_logger.meters[f"best_shot{s}"].update(meter_ema.meters[f"shot{s}_acc"].global_avg)
 
                 if scaler:
                     checkpoint["scaler"] = scaler.state_dict()

@@ -42,7 +42,7 @@ DEFAULT_RA_REPS = 3
 DEFAULT_INTERPOLATION = "bilinear"
 DEFAULT_WORLD_SIZE = 1
 DEFAULT_DIST_URL = "env://"
-DEFAULT_LOSS = "MKLoss"
+DEFAULT_LOSS = "MLLoss"
 DEFAULT_LOGIT = "l2_dist"
 DEFAULT_LOGIT_TEMPERATURE = 1
 DEFAULT_NUM_NN = 1
@@ -52,6 +52,7 @@ DEFAULT_TEST_WAY = 5
 DEFAULT_TEST_QUERY = 15
 DEFAULT_SHOT = "1,5"
 DEFAULT_EVAL_NORM_TYPE = "CCOS"
+DEFAULT_NORM = 2
 
 # Flags for actions
 
@@ -378,6 +379,12 @@ def get_args_parser(add_help=True):
         "--tsne",
         action="store_true",
         help="visualize features with t-SNE",
+    )
+    parser.add_argument(
+        "--norm",
+        default=DEFAULT_NORM,
+        type=float,
+        help="norm of the distance (default 2)",
     )
 
     return parser

@@ -16,7 +16,6 @@ modified by WT
 
 import torch
 import torch.distributed.nn
-import torch.nn.functional as F
 from torch import distributed, nn
 
 from src import utils
@@ -140,14 +139,6 @@ class MKLoss(nn.Module):
         logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
-
-        temp = torch.exp(torch.logsumexp(masked_logit(logit, class_mask), 1, keepdim=True))
-        pos_ = torch.exp(torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)).unsqueeze(-1)
-
-        ratio = (pos_ / temp).mean()
-
-        with open("ratio.txt", "a") as f:
-            f.write(f"{ratio.item()}\n")
 
         loss = torch.logsumexp(logit, dim=-1) - torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
         return loss.mean()
@@ -534,16 +525,16 @@ class AsymmetricLoss(BCELoss):
         return -loss.sum(dim=-1).mean()
 
 
-class MKBLoss(nn.Module):
+class MLLoss(nn.Module):
     """Multi-label Loss function: M/K ✦"""
 
-    def __init__(self, T=1.0, logit="l2_dist", **kwargs):
+    def __init__(self, T=1.0, logit="l2_dist", norm=2, **kwargs):
         super().__init__()
 
         # Logit function
         self.logit_func = logit_funcs[logit]
-
         self.T = T
+        self.p = norm
 
     def forward(self, xq, yq, xs, ys, pos):
         # Class correspondence
@@ -553,43 +544,18 @@ class MKBLoss(nn.Module):
             pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
 
-        xq, xs = F.normalize(xq), F.normalize(xs)
-        logit = 1 + self.logit_func(xq, xs) / self.T
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
+        # p = F.hardtanh(self.p, 1, 2)
 
-        loss = torch.logsumexp(logit, dim=-1) - torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
-        return loss.mean()
+        # xq, xs = F.normalize(xq, p=1, dim=-1), F.normalize(xs, p=1, dim=-1)
+        logit = -torch.cdist(xq, xs, self.p).pow(2) / self.T
 
-
-class MLLoss(nn.Module):
-    """Multi-label Loss function: M/K ✦"""
-
-    def __init__(self, T=1.0, logit="l2_dist", **kwargs):
-        super().__init__()
-
-        # Logit function
-        self.logit_func = logit_funcs[logit]
-
-        self.T = T
-
-    def forward(self, xq, yq, xs, ys, pos):  # noqa: PLR0913
-        # Class correspondence
-        with torch.no_grad():
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-            class_mask[ind[idx], pos[idx]] = False
-
-        xq, xs = F.normalize(xq), F.normalize(xs)
-        logit = -torch.cdist(xq, xs, p=0.9)
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
         pos_logit = torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
 
-        logit = -torch.cdist(xq, xs, p=0.9)
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
+        # logit = -torch.cdist(xq, xs, p=0.9)
+        # logit[ind, pos] *= 0
+        # logit[ind[idx], pos[idx]] -= INF
         neg_logit = torch.logsumexp(logit, dim=-1)
 
         loss = neg_logit - pos_logit

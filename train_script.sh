@@ -14,10 +14,9 @@
 #         torchrun --nproc_per_node=4 --master_port=35757 train.py --logit=${logit}_dist --resume=result/${logit}wcp/${loss}/checkpoints/best_shot5_model.pth --test-only | tail -n 16 | tee -a result.log
 #     done
 # done
-
-# for i in {1..5}
-# do
-#     torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l2_dist --loss=MKLoss --class-proxy --output-dir=result/test/l2/MK_$i
-#     torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l1_dist --loss=MKLoss --class-proxy --output-dir=result/test/l1/MK_$i
-# done
-torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l2_dist --loss=MKLoss --class-proxy
+p=(1 5 10 15 20 30 40 60)
+for i in ${p[@]}
+do
+    torchrun --nproc_per_node=4 --master_port=35768 train.py --loss=MKLoss --class-proxy --output-dir=result/test/MLL_${i} --logit-temperature=${i} --logit=l1_dist
+done
+# torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l2_dist --loss=MLLoss --class-proxy --output-dir=result/test/MK
