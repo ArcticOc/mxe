@@ -71,7 +71,6 @@ class KKLoss(nn.Module):
             ind = torch.arange(len(pos))
             yq_new = torch.zeros_like(yq)
 
-        # C = counts[ys].repeat(len(yq), 1) - 1 * class_mask
         logit = self.logit_func(xq, xs) / self.T
         # logit += torch.log(torch.reciprocal(C))
         logit[ind, pos] *= 0
@@ -560,6 +559,75 @@ class MLLoss(nn.Module):
 
         loss = neg_logit - pos_logit
         return loss.mean()
+
+
+class ProtoNet(nn.Module):
+    def __init__(self, T=1.0, logit="l2_dist", class_aware_sampler=None, **kwargs):
+        super().__init__()
+
+        # Logit function
+        self.logit_func = logit_funcs[logit]
+        assert class_aware_sampler is not None, "class-aware-sampler is required"
+        self.class_num = int(class_aware_sampler.split(",")[0])  # n-way
+        self.sample_num = int(class_aware_sampler.split(",")[1])
+        self.support_num = 4  # k-shot
+        self.query_num = self.sample_num - self.support_num  # query
+        self.xe = nn.CrossEntropyLoss()
+        self.T = T
+
+    def forward(self, xq, yq, xs, ys, pos):
+        with torch.no_grad():
+            sorted_indices = ys.argsort()
+            y_q = torch.arange(self.class_num).repeat_interleave(self.query_num).cuda()
+
+        sorted_xs = xs[sorted_indices]
+        assert sorted_xs.size(0) == self.class_num * self.sample_num, "Unexpected number of samples"
+        xs_total = sorted_xs.reshape(self.class_num, self.sample_num, xs.size(-1))
+        x_s = xs_total[:, : self.support_num, :]
+        x_q = xs_total[:, self.support_num :, :].reshape(-1, x_s.size(-1))
+
+        proto = x_s.mean(dim=1)
+        distances = self.logit_func(x_q, proto)
+        logit = distances / self.T
+        loss = self.xe(logit, y_q)
+        return loss
+
+
+class MatchingNet(nn.Module):
+    def __init__(self, T=1.0, logit="l2_dist", class_aware_sampler=None, **kwargs):
+        super().__init__()
+
+        # Logit function
+        self.logit_func = logit_funcs[logit]
+        assert class_aware_sampler is not None, "class-aware-sampler is required"
+        self.class_num = int(class_aware_sampler.split(",")[0])  # n-way
+        self.sample_num = int(class_aware_sampler.split(",")[1])
+        self.support_num = 4  # k-shot
+        self.query_num = self.sample_num - self.support_num  # query
+        self.xe = nn.CrossEntropyLoss()
+        self.T = T
+
+    def forward(self, xq, yq, xs, ys, pos):
+        with torch.no_grad():
+            sorted_indices = ys.argsort()
+            y_s = torch.arange(self.class_num).repeat_interleave(self.support_num).cuda()
+            y_q = torch.arange(self.class_num).repeat_interleave(self.query_num).cuda()
+            yq_new = torch.zeros_like(y_q)
+            class_mask = y_q.view(-1, 1) == y_s.view(1, -1)  # nq x ns
+
+        sorted_xs = xs[sorted_indices]
+        assert sorted_xs.size(0) == self.class_num * self.sample_num, "Unexpected number of samples"
+        xs_total = sorted_xs.reshape(self.class_num, self.sample_num, xs.size(-1))
+        x_s = xs_total[:, : self.support_num, :].reshape(-1, xs.size(-1))
+        x_q = xs_total[:, self.support_num :, :].reshape(-1, xs.size(-1))
+
+        distances = self.logit_func(x_q, x_s)
+
+        pos_logit = torch.logsumexp(masked_logit(distances, class_mask), 1, keepdim=True)
+        neg_logit = torch.logsumexp(masked_logit(distances, ~class_mask), 1, keepdim=True)
+
+        loss = self.xe(torch.cat([pos_logit, neg_logit], 1), yq_new)
+        return loss
 
 
 # - Wrapper class for distributed training -#

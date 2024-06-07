@@ -37,17 +37,10 @@ def get_metric(metric_type):
     :return metric function (callable function):
     """
     METRICS = {
-        "cosine": lambda gallery, query: 1.0
-        - F.cosine_similarity(query[:, None, :], gallery[None, :, :], dim=2),
-        "euclidean": lambda gallery, query: (
-            (query[:, None, :] - gallery[None, :, :]) ** 2
-        ).sum(2),
-        "l1": lambda gallery, query: torch.norm(
-            (query[:, None, :] - gallery[None, :, :]), p=1, dim=2
-        ),
-        "l2": lambda gallery, query: torch.norm(
-            (query[:, None, :] - gallery[None, :, :]), p=2, dim=2
-        ),
+        "cosine": lambda gallery, query: 1.0 - F.cosine_similarity(query[:, None, :], gallery[None, :, :], dim=2),
+        "euclidean": lambda gallery, query: ((query[:, None, :] - gallery[None, :, :]) ** 2).sum(2),
+        "l1": lambda gallery, query: torch.norm((query[:, None, :] - gallery[None, :, :]), p=1, dim=2),
+        "l2": lambda gallery, query: torch.norm((query[:, None, :] - gallery[None, :, :]), p=2, dim=2),
     }
     return METRICS[metric_type]
 
@@ -99,9 +92,7 @@ def metric_class_type(
     # if (args.num_NN == 1 or shot == 1) and not args.soft_assignment:
     if not args.disable_nearest_mean_classifier:
         if args.median_prototype:
-            gallery = np.median(
-                gallery.reshape(args.test_way, shot, gallery.shape[-1]), axis=1
-            )
+            gallery = np.median(gallery.reshape(args.test_way, shot, gallery.shape[-1]), axis=1)
         else:
             gallery = gallery.reshape(args.test_way, shot, gallery.shape[-1]).mean(1)
         if norm_type == "COS":
@@ -125,15 +116,11 @@ def metric_class_type(
             nearest_samples_labels = np.take(train_label, idx)
             nearest_samples_distances = np.sort(norm_distance, axis=0)[-num_NN:]
 
-            weighted_nearest_neighbours = np.zeros(
-                (args.num_classes, nearest_samples_labels.shape[-1])
-            )
+            weighted_nearest_neighbours = np.zeros((args.num_classes, nearest_samples_labels.shape[-1]))
             # sum the total contribution of each example
             for i, row in enumerate(nearest_samples_labels):
                 for j, element in enumerate(row):
-                    weighted_nearest_neighbours[element, j] += (
-                        nearest_samples_distances[i, j]
-                    )
+                    weighted_nearest_neighbours[element, j] += nearest_samples_distances[i, j]
 
             # predict
             predictions = np.argmax(weighted_nearest_neighbours, axis=0)
@@ -141,9 +128,7 @@ def metric_class_type(
             return acc
         else:
             # reshape the norm_distances and sum the likelihoods to get likelihood for each class
-            norm_distance = norm_distance.reshape(
-                args.test_way, shot, norm_distance.shape[-1]
-            ).sum(1)
+            norm_distance = norm_distance.reshape(args.test_way, shot, norm_distance.shape[-1]).sum(1)
             # get the train labels
             train_label = train_label[::shot]
 
@@ -216,23 +201,15 @@ def extract_feature(train_loader, val_loader, model, args):
                 fc_out_mean.append(fc_outputs.cpu().data.numpy())
         out_mean = np.concatenate(out_mean, axis=0).mean(0)
 
-        fc_out_mean = (
-            np.concatenate(fc_out_mean, axis=0).mean(0) if len(fc_out_mean) > 0 else -1
-        )
+        fc_out_mean = np.concatenate(fc_out_mean, axis=0).mean(0) if len(fc_out_mean) > 0 else -1
 
         output_dict = collections.defaultdict(list)
         fc_output_dict = collections.defaultdict(list)
         for i, (inputs, labels) in enumerate(val_loader):
             # compute output
-            outputs, fc_outputs = model(
-                inputs, use_fc=use_fc, cat=args.multi_layer_eval
-            )
+            outputs, fc_outputs = model(inputs, use_fc=use_fc, cat=args.multi_layer_eval)
             outputs = outputs.cpu().data.numpy()
-            fc_outputs = (
-                fc_outputs.cpu().data.numpy()
-                if fc_outputs is not None
-                else [None] * outputs.shape[0]
-            )
+            fc_outputs = fc_outputs.cpu().data.numpy() if fc_outputs is not None else [None] * outputs.shape[0]
             for out, fc_out, label in zip(outputs, fc_outputs, labels):  # noqa: B905
                 output_dict[label.item()].append(out)
                 fc_output_dict[label.item()].append(fc_out)
@@ -261,15 +238,11 @@ def extract_and_evaluate_allshots(
     checkpoint1 = torch.load("{}_checkpoint.pth.tar".format(model_name))
     model.load_state_dict(checkpoint1["state_dict"])
     # compute training dataset statistics
-    out_mean, fc_out_mean, out_dict, fc_out_dict = extract_feature(
-        train_loader_for_avg, eval_loader, model, args
-    )
+    out_mean, fc_out_mean, out_dict, fc_out_dict = extract_feature(train_loader_for_avg, eval_loader, model, args)
 
     save_shot_npy = np.zeros(args.evaluate_all_shots)
     for k in range(1, args.evaluate_all_shots + 1):
-        shot_info = tuple(
-            [100 * x for x in meta_evaluate(out_dict, out_mean, k, num_iter, args)]
-        )
+        shot_info = tuple([100 * x for x in meta_evaluate(out_dict, out_mean, k, num_iter, args)])
         save_shot_npy[k - 1] = shot_info[0]
 
         print(
@@ -304,20 +277,12 @@ def extract_and_evaluate(
         num_iter = args.test_iter if split == "test" else args.val_iter
 
     if model_name:
-        checkpoint1 = torch.load(
-            "{}/{}_best1.pth.tar".format(
-                os.path.join(args.output_dir, "checkpoints"), model_name
-            )
-        )
+        checkpoint1 = torch.load("{}/{}_best1.pth.tar".format(os.path.join(args.output_dir, "checkpoints"), model_name))
         model.load_state_dict(checkpoint1["state_dict"])
         out_mean1, fc_out_mean1, out_dict1, fc_out_dict1 = extract_feature(
             train_loader_for_avg, eval_loader, model, args
         )
-        checkpoint5 = torch.load(
-            "{}/{}_best5.pth.tar".format(
-                os.path.join(args.output_dir, "checkpoints"), model_name
-            )
-        )
+        checkpoint5 = torch.load("{}/{}_best5.pth.tar".format(os.path.join(args.output_dir, "checkpoints"), model_name))
         model.load_state_dict(checkpoint5["state_dict"])
         out_mean5, fc_out_mean5, out_dict5, fc_out_dict5 = extract_feature(
             train_loader_for_avg, eval_loader, model, args
@@ -335,12 +300,8 @@ def extract_and_evaluate(
             fc_out_dict1,
         )
 
-    shot1_info = tuple(
-        [100 * x for x in meta_evaluate(out_dict1, out_mean1, 1, num_iter, args)]
-    )
-    shot5_info = tuple(
-        [100 * x for x in meta_evaluate(out_dict5, out_mean5, 5, num_iter, args)]
-    )
+    shot1_info = tuple([100 * x for x in meta_evaluate(out_dict1, out_mean1, 1, num_iter, args)])
+    shot5_info = tuple([100 * x for x in meta_evaluate(out_dict5, out_mean5, 5, num_iter, args)])
 
     print(
         ">>>\t ### {} set:\nfeature\tCL2N\n{}\t{:2.2f}({:2.2f})\n{}\t{:2.2f}({:2.2f})".format(
@@ -392,9 +353,7 @@ def validate_loss(val_loader, model, nca_f, xent_f, args):
             if args.xent_weight > 0:
                 features, fc_output = model(input, use_fc=True)
                 xent_loss = xent_f(fc_output, target.cuda(non_blocking=True))
-                metric_logger.meters["xent_loss"].update(
-                    xent_loss.item(), n=input.size(0)
-                )
+                metric_logger.meters["xent_loss"].update(xent_loss.item(), n=input.size(0))
             else:
                 features, _ = model(input, use_fc=False)
 

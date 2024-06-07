@@ -1,6 +1,6 @@
 """
 This code is based on
-https://github.com/pytorch/vision/tree/main/references/classification 
+https://github.com/pytorch/vision/tree/main/references/classification
 
 modified by Takumi Kobayashi
 """
@@ -68,7 +68,8 @@ class RASampler(torch.utils.data.Sampler):
     def set_epoch(self, epoch):
         self.epoch = epoch
 
-#NOTE: It was stated to be used in the original paper, whereas not in code.
+
+# NOTE: It was stated to be used in the original paper, whereas not in code.
 class ClassAwareDistributedSampler(torch.utils.data.distributed.DistributedSampler):
     def __init__(self, dataset, class_per_batch, sample_per_class, **kwargs) -> None:
         super(ClassAwareDistributedSampler, self).__init__(dataset, **kwargs)
@@ -78,17 +79,15 @@ class ClassAwareDistributedSampler(torch.utils.data.distributed.DistributedSampl
         class_counts = [(self.y == c).sum().item() for c in self.y.unique()]
         max_samp_num = max(class_counts)
         num_classes = len(class_counts)
-        num_samples = max_samp_num*num_classes
+        num_samples = max_samp_num * num_classes
 
-        if self.drop_last and num_samples % self.num_replicas != 0: 
-            self.num_samples = math.ceil(
-                (num_samples - self.num_replicas) / self.num_replicas
-            )
+        if self.drop_last and num_samples % self.num_replicas != 0:
+            self.num_samples = math.ceil((num_samples - self.num_replicas) / self.num_replicas)
         else:
             self.num_samples = math.ceil(num_samples / self.num_replicas)  # type: ignore[arg-type]
         self.total_size = self.num_samples * self.num_replicas
         self.samples_in_batch = [class_per_batch, sample_per_class]
-        print(len(self.dataset), self.total_size) ##
+        print(len(self.dataset), self.total_size)  ##
 
     def __iter__(self):
         if self.shuffle:
@@ -106,36 +105,41 @@ class ClassAwareDistributedSampler(torch.utils.data.distributed.DistributedSampl
                 indices += (indices * math.ceil(padding_size / len(indices)))[:padding_size]
         else:
             # remove tail of data to make it evenly divisible.
-            indices = indices[:self.total_size]
+            indices = indices[: self.total_size]
         assert len(indices) == self.total_size
 
         # subsample
-        indices = indices[self.rank:self.total_size:self.num_replicas]
+        indices = indices[self.rank : self.total_size : self.num_replicas]
         assert len(indices) == self.num_samples
 
         return iter(indices)
 
     def class_aware_shuffle(self, g):
         y, bc, bn = self.y, *self.samples_in_batch
-        
-        cls_to_ind = [torch.nonzero(y==c).squeeze() for c in y.unique()]
+
+        cls_to_ind = [torch.nonzero(y == c).squeeze() for c in y.unique()]
         max_samp_num = max([len(x) for x in cls_to_ind])
-        cls_to_ind = torch.stack([self.randshuffle(self.append(x,max_samp_num,g),g) for x in cls_to_ind]) # [C x max(#sample)]
-        
-        D = self.split( cls_to_ind, bn ) # [C x bn] * r
-        D = [self.randshuffle(x,g).flatten() for x in D] # class order shuffle: [rand(C)*bn] * r
-        
-        batches = self.split(torch.cat(D), bc*bn) #[bc*bc] * r
-        batches = torch.cat([self.randshuffle(x,g) for x in batches]) # shuffle in mini-batch
-        
+        cls_to_ind = torch.stack(
+            [self.randshuffle(self.append(x, max_samp_num, g), g) for x in cls_to_ind]
+        )  # [C x max(#sample)]
+
+        D = self.split(cls_to_ind, bn)  # [C x bn] * r
+        D = [self.randshuffle(x, g).flatten() for x in D]  # class order shuffle: [rand(C)*bn] * r
+
+        batches = self.split(torch.cat(D), bc * bn)  # [bc*bc] * r
+        batches = torch.cat([self.randshuffle(x, g) for x in batches])  # shuffle in mini-batch
+
         return batches
-    
+
     def randshuffle(self, x, g):
         inds = torch.randperm(len(x), generator=g)
         return x[inds]
+
     def append(self, x, n, g):
-        return torch.cat([x.repeat(n//len(x)), self.randshuffle(x,g)[:(n%len(x))]])
+        return torch.cat([x.repeat(n // len(x)), self.randshuffle(x, g)[: (n % len(x))]])
+
     def split(self, x, num, dim=-1):
-        return torch.tensor_split( x, torch.arange(0,x.size(dim),num)[1:] , dim)
+        return torch.tensor_split(x, torch.arange(0, x.size(dim), num)[1:], dim)
+
     def histcount(self, x, C):
-        return [(x==c).sum().item() for c in range(C)]
+        return [(x == c).sum().item() for c in range(C)]

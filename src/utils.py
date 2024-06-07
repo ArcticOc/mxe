@@ -1,6 +1,6 @@
 """
 This code is based on
-https://github.com/pytorch/vision/tree/main/references/classification 
+https://github.com/pytorch/vision/tree/main/references/classification
 
 modified by Takumi Kobayashi
 """
@@ -11,16 +11,15 @@ import errno
 import hashlib
 import os
 import time
-from collections import defaultdict, deque, OrderedDict
-from typing import List, Optional, Tuple
-
+from collections import OrderedDict, defaultdict, deque
 from functools import reduce
+from typing import List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
 import torch.distributed.nn
-
 from torch.utils.tensorboard import SummaryWriter
+
 
 class TensorWriter:
     def __init__(self, log_dir):
@@ -33,10 +32,12 @@ class TensorWriter:
                 self.writer.add_scalar(k + '/' + suffix, meter.meters[k].global_avg, epoch)
             self.writer.close()
 
+
 class BestValue:
     """
     Class to keep track of best scores on different normalisation
     """
+
     def __init__(self):
         self.best_value = -1
         self.is_best = False
@@ -45,6 +46,7 @@ class BestValue:
         # choose best epoch according to CL2N performance, update everything
         self.is_best = val > self.best_value
         self.best_value = max(self.best_value, val)
+
 
 class SmoothedValue:
     """Track a series of values and provide access to smoothed values over a
@@ -123,7 +125,7 @@ class MetricLogger:
     def __str__(self):
         loss_str = []
         for name, meter in self.meters.items():
-            loss_str.append(f"{name}: {str(meter)}")
+            loss_str.append(f"{name}: {str(meter)}")  # noqa: RUF010
         return self.delimiter.join(loss_str)
 
     def synchronize_between_processes(self):
@@ -440,6 +442,7 @@ def reduce_across_processes(val, op='SUM'):
     elif op == 'MEAN':
         return t / get_world_size()
 
+
 def gather_across_processes(x):
     if not is_dist_avail_and_initialized():
         # nothing to sync, but we still convert to tensor for consistency with the distributed case.
@@ -510,6 +513,7 @@ def set_weight_decay(
             param_groups.append({"params": params[key], "weight_decay": params_weight_decay[key]})
     return param_groups
 
+
 def load_state_dict_finetune(net, new_state_dict):
     old_state_dict = net.state_dict()
     inconsist_layer = []
@@ -522,12 +526,14 @@ def load_state_dict_finetune(net, new_state_dict):
     net.load_state_dict(new_state_dict)
     return net, inconsist_layer[-1]
 
+
 def ema_cleanup(model):
     net = {}
     for k in model.keys():
         if k.startswith('module.'):
             net[k[7:]] = model[k]
     return net
+
 
 def set_module_by_name(module, access_string, new_layer):
     """Retrieve a module nested in another by its access string.

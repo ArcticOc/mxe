@@ -99,8 +99,8 @@ def main(args):
         feature_dim=args.projection_feat_dim,
         projection=args.projection,
         use_fc=False,
-        image_size=args.train_crop_size,
     )
+
     model.to(device)
 
     if args.distributed:

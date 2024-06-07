@@ -5,7 +5,7 @@ https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
 """
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 __all__ = [
     "resnet10",
@@ -20,9 +20,7 @@ __all__ = [
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
-    return nn.Conv2d(
-        in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False
-    )
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
 
 
 def conv1x1(in_planes, out_planes, stride=1):
@@ -200,6 +198,7 @@ class ResNet(nn.Module):
             x1 = self.fc(x) if use_fc else None
 
         if self.training and self.projection:
+            # if self.projection:
             x = self.proj1(x)
 
         return x, x1
