@@ -90,7 +90,7 @@ def metric_class_type(
     # if we don't do soft assignment, and no nearest neighbour (num_NN = 1), then compute
     # the prototypes
     # if (args.num_NN == 1 or shot == 1) and not args.soft_assignment:
-    if not args.disable_nearest_mean_classifier:
+    if not args.disable_nearest_mean_classifier and not args.soft_assignment:
         if args.median_prototype:
             gallery = np.median(gallery.reshape(args.test_way, shot, gallery.shape[-1]), axis=1)
         else:

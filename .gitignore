@@ -16,3 +16,4 @@ result/*
 tsne/*
 pyproject.toml
 *.log
+result_comp/*

@@ -197,8 +197,8 @@ class ResNet(nn.Module):
 
             x1 = self.fc(x) if use_fc else None
 
-        if self.training and self.projection:
-            # if self.projection:
+        if self.training and self.projection:  # project only during training
+            # if self.projection: # always project
             x = self.proj1(x)
 
         return x, x1
