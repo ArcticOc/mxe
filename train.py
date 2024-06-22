@@ -121,10 +121,10 @@ def main(args):
         model,
         args.weight_decay,
     )
-    """ parameters = parameters + utils.set_weight_decay(
+    parameters = parameters + utils.set_weight_decay(
         criterion,
         args.weight_decay,
-    ) """
+    )
 
     opt_name = args.opt.lower()
     if opt_name.startswith("sgd"):

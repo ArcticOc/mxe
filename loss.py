@@ -32,8 +32,8 @@ def masked_logit(D, M):
 
 # - logit based on pair-wise distance -#
 def l2_dist(xq, xs):
-    return -torch.pow(torch.cdist(xq, xs), 2).div(2)
-    # return -torch.cdist(xq, xs)
+    # return -torch.pow(torch.cdist(xq, xs), 2).div(2)
+    return -torch.cdist(xq, xs)
     # return -torch.cdist(xq, xs).pow(2)
 
 
@@ -211,15 +211,9 @@ class KPLoss(nn.Module):
         proto_n = mus / counts.unsqueeze(-1).clamp(min=0.1)
 
         # Denominator K logit
-        if self.logit_func == l2_dist:
-            logit_denominator_pos = -torch.cdist(xq, proto).diag()
-            logit_denominator = -torch.cdist(xq, proto_n)
-            logit_denominator[torch.arange(len(yq)), yq_new] = logit_denominator_pos  # nq x class
-
-        elif self.logit_func == l1_dist:
-            logit_denominator_pos = -torch.cdist(xq, proto, p=1).diag()
-            logit_denominator = -torch.cdist(xq, proto_n, p=1)
-            logit_denominator[torch.arange(len(yq)), yq] = logit_denominator_pos  # nq x class
+        logit_denominator_pos = self.logit_func(xq, proto).diag()
+        logit_denominator = self.logit_func(xq, proto_n)
+        logit_denominator[torch.arange(len(yq)), yq_new] = logit_denominator_pos  # nq x class
 
         neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
 
@@ -252,6 +246,7 @@ class MPLoss(nn.Module):
             one_hot = ys.view(-1, 1) == classes
             class_mask = yq.view(-1, 1) == ys.view(1, -1)
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
+            yq_new = one_hot[pos].nonzero()[:, 1]
             pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
 
@@ -262,15 +257,9 @@ class MPLoss(nn.Module):
         proto_n = mus / counts.unsqueeze(-1).clamp(min=0.1)
 
         # Denominator P logit
-        if self.logit_func == l2_dist:
-            logit_denominator_pos = -torch.cdist(xq, proto).diag()
-            logit_denominator = -torch.cdist(xq, proto_n)
-            logit_denominator[torch.arange(len(yq)), yq] = logit_denominator_pos  # nq x class
-
-        elif self.logit_func == l1_dist:
-            logit_denominator_pos = -torch.pow(torch.cdist(xq, proto), 2).diag()
-            logit_denominator = -torch.cdist(xq, proto_n, p=1)
-            logit_denominator[torch.arange(len(yq)), yq] = logit_denominator_pos  # nq x class
+        logit_denominator_pos = self.logit_func(xq, proto).diag()
+        logit_denominator = self.logit_func(xq, proto_n)
+        logit_denominator[torch.arange(len(yq)), yq_new] = logit_denominator_pos  # nq x class
 
         neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
 
@@ -301,15 +290,16 @@ class PMLoss(nn.Module):
             class_mask = yq.view(-1, 1) == ys.view(1, -1)
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
             pos, ind = torch.tensor(pos), torch.arange(len(pos))
+            yq_new = one_hot[pos].nonzero()[:, 1]
 
         mus = torch.mm(one_hot.t().float(), xs)
-        M = mus[yq] - xq
-        C = counts[yq] - 1
+        M = mus[yq_new] - xq
+        C = counts[yq_new] - 1
         proto = M / C.unsqueeze(-1).clamp(min=0.1)
         # Numerator P logit
-        if self.logit_func == l2_dist:
-            logit_numerator = -torch.cdist(xq, proto).pow(2).diag()
 
+        # logit_numerator = self.logit_func(xq, proto).diag()
+        logit_numerator = -torch.cdist(xq, proto, 2).diag()
         logit_numerator *= C > 0.1
         pos_logit = logit_numerator.unsqueeze(-1)
 
@@ -317,10 +307,7 @@ class PMLoss(nn.Module):
         logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
-        summed_distances = torch.zeros(
-            xq.size(0),
-            len(classes),
-        ).cuda()
+        summed_distances = torch.zeros(xq.size(0), len(classes)).cuda()
 
         for i, cls in enumerate(classes):
             class_mask_ = ys == cls
@@ -547,7 +534,7 @@ class MLLoss(nn.Module):
         # p = F.hardtanh(self.p, 1, 2)
 
         # xq, xs = F.normalize(xq, p=1, dim=-1), F.normalize(xs, p=1, dim=-1)
-        logit = -torch.cdist(xq, xs, self.p).pow(2) / self.T
+        logit = -torch.cdist(xq, xs, self.p).pow(self.p) / self.T
 
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF

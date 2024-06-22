@@ -12,10 +12,10 @@
             "request": "launch",
             "console": "integratedTerminal",
             "args": [
-                "--nproc_per_node=1",
+                "--nproc_per_node=4",
                 "train.py",
                 "--output-dir=result/debug",
-                // "--class-proxy",
+                "--class-proxy",
             ],
         }
     ]
