@@ -63,26 +63,17 @@ def load_data(traindir, valdir, testdir, args):
     print("Creating data loaders")
     if args.distributed:
         if hasattr(args, "ra_sampler") and args.ra_sampler:
-            train_sampler = sampler.RASampler(
-                dataset, shuffle=True, repetitions=args.ra_reps
-            )
+            train_sampler = sampler.RASampler(dataset, shuffle=True, repetitions=args.ra_reps)
         elif hasattr(args, "class_aware_sampler") and args.class_aware_sampler:
             bcls, bnum = [int(x) for x in args.class_aware_sampler.split(",")]
             assert bcls * bnum == utils.get_world_size() * args.batch_size
-            train_sampler = sampler.ClassAwareDistributedSampler(
-                dataset, class_per_batch=bcls, sample_per_class=bnum
-            )
+            train_sampler = sampler.ClassAwareDistributedSampler(dataset, class_per_batch=bcls, sample_per_class=bnum)
         else:
             train_sampler = torch.utils.data.distributed.DistributedSampler(dataset)
-        train_avg_sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset_avg, shuffle=False
-        )
-        val_sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset_val, shuffle=False
-        )
-        test_sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset_test, shuffle=False
-        )
+
+        train_avg_sampler = torch.utils.data.distributed.DistributedSampler(dataset_avg, shuffle=False)
+        val_sampler = torch.utils.data.distributed.DistributedSampler(dataset_val, shuffle=False)
+        test_sampler = torch.utils.data.distributed.DistributedSampler(dataset_test, shuffle=False)
     else:
         train_sampler = torch.utils.data.RandomSampler(dataset)
         train_avg_sampler = torch.utils.data.SequentialSampler(dataset_avg)

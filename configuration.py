@@ -14,13 +14,13 @@ DEFAULT_AMP = True
 DEFAULT_DEVICE = "cuda"
 DEFAULT_WORKERS = 16
 DEFAULT_BATCH_SIZE = 128
-DEFAULT_EPOCHS = 120
+DEFAULT_EPOCHS = 130
 DEFAULT_OPTIMIZER = "sgd"
 DEFAULT_LR = 0.1
 DEFAULT_MOMENTUM = 0.9
 DEFAULT_WEIGHT_DECAY = 0.0005
 DEFAULT_LR_SCHEDULER = "steplr"
-DEFAULT_LR_STEP_SIZE = 84  # Actually, lr decreases at step_size+warmup_epochs
+DEFAULT_LR_STEP_SIZE = 84
 DEFAULT_LR_GAMMA = 0.01
 DEFAULT_LR_MIN = 0.0
 DEFAULT_LR_WARMUP_EPOCHS = 10
@@ -42,9 +42,10 @@ DEFAULT_RA_REPS = 3
 DEFAULT_INTERPOLATION = "bilinear"
 DEFAULT_WORLD_SIZE = 1
 DEFAULT_DIST_URL = "env://"
-DEFAULT_LOSS = "PMLoss"
-DEFAULT_LOGIT = "l2_dist"
+DEFAULT_LOSS = "MLLoss"
+DEFAULT_LOGIT = "l1_dist"
 DEFAULT_LOGIT_TEMPERATURE = 1
+DEFAULT_CLASSIFIER = "nc"
 DEFAULT_NUM_NN = 1
 DEFAULT_TEST_ITER = 10000
 DEFAULT_VAL_ITER = 3000
@@ -53,6 +54,7 @@ DEFAULT_TEST_QUERY = 15
 DEFAULT_SHOT = "1,5"
 DEFAULT_EVAL_NORM_TYPE = "CCOS"
 DEFAULT_NORM = 2
+DEFAULT_OPERATOR = "+"
 
 # Flags for actions
 
@@ -318,16 +320,12 @@ def get_args_parser(add_help=True):
         action="store_true",
         help="Augment support set by trainable class centers",
     )
+    parser.add_argument("--classifier", default=DEFAULT_CLASSIFIER, type=str, help="classifier type")
     parser.add_argument(
         "--num-NN",
         default=DEFAULT_NUM_NN,
         type=int,
         help="number of nearest neighbors, set this number >1 when do kNN (default 1)",
-    )
-    parser.add_argument(
-        "--soft-assignment",
-        action="store_true",
-        help="use soft assignment for multiple shot classification.",
     )
     parser.add_argument(
         "--median-prototype",
@@ -371,11 +369,6 @@ def get_args_parser(add_help=True):
         help="norm type in evaluation [CL2N|L2N|COS|CCOS] (default CL2N)",
     )
     parser.add_argument(
-        "--disable-nearest-mean-classifier",
-        action="store_true",
-        help="not use nearest-mean classifier",
-    )
-    parser.add_argument(
         "--tsne",
         action="store_true",
         help="visualize features with t-SNE",
@@ -385,6 +378,12 @@ def get_args_parser(add_help=True):
         default=DEFAULT_NORM,
         type=float,
         help="norm of the distance (default 2)",
+    )
+    parser.add_argument(
+        "--operator",
+        default=DEFAULT_OPERATOR,
+        type=str,
+        help="operator for combining features (default +)",
     )
 
     return parser

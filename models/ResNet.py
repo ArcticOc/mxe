@@ -105,7 +105,7 @@ class ResNet(nn.Module):
         layers,
         widths=[64, 128, 256, 512],
         feature_dim=512,
-        num_classes=1000,
+        num_classes=64,
         projection=False,
         zero_init_residual=False,
         drop_rate=0,
@@ -121,11 +121,13 @@ class ResNet(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
+        self.sigmoid = nn.Sigmoid()
         self.layer1 = self._make_layer(block, widths[0], layers[0])
         self.layer2 = self._make_layer(block, widths[1], layers[1], stride=2)
         self.layer3 = self._make_layer(block, widths[2], layers[2], stride=2)
         self.layer4 = self._make_layer(block, widths[3], layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+
         if self.projection:
             self.proj1 = nn.Linear(widths[3] * block.expansion, feature_dim)
 

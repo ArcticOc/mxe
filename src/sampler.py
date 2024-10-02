@@ -112,6 +112,8 @@ class ClassAwareDistributedSampler(torch.utils.data.distributed.DistributedSampl
         indices = indices[self.rank : self.total_size : self.num_replicas]
         assert len(indices) == self.num_samples
 
+        indices = self.get_sublist(indices, self.samples_in_batch[0] * self.samples_in_batch[1] // self.num_replicas)
+
         return iter(indices)
 
     def class_aware_shuffle(self, g):
@@ -143,3 +145,7 @@ class ClassAwareDistributedSampler(torch.utils.data.distributed.DistributedSampl
 
     def histcount(self, x, C):
         return [(x == c).sum().item() for c in range(C)]
+
+    def get_sublist(self, lst, a):
+        b = len(lst) % a
+        return lst[: len(lst) - b]

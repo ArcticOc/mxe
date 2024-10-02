@@ -14,7 +14,7 @@
             "args": [
                 "--nproc_per_node=4",
                 "train.py",
-                "--output-dir=result/debug",
+                // "--output-dir=result/debug",
                 "--class-proxy",
             ],
         }

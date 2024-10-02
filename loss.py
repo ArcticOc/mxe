@@ -1,23 +1,12 @@
 """
 Loss functions for few-shot learning
 written by Takumi Kobayashi
-modified by WT
+WU modified and added additional features
 """
-# Loss functions table
-# +-------+-------+-----+-------+
-# |       | Proto | KDE | Multi |
-# +-------+-------+-----+-------+
-# | Proto |  P/P  | K/P |  M/P  |
-# +-------+-------+-----+-------+
-# |  KDE  |  P/K  | K/K |  M/K✦ |
-# +-------+-------+-----+-------+
-# | Multi |  P/M  | K/M |  M/M  |
-# +-------+-------+-----+-------+
 
 import torch
 import torch.distributed.nn
 from torch import distributed, nn
-from torch.nn import functional as F
 
 from src import utils
 
@@ -32,9 +21,13 @@ def masked_logit(D, M):
 
 # - logit based on pair-wise distance -#
 def l2_dist(xq, xs):
-    # return -torch.pow(torch.cdist(xq, xs), 2).div(2)
-    return -torch.cdist(xq, xs)
+    return -torch.pow(torch.cdist(xq, xs), 2).div(2)
+    # return -torch.cdist(xq, xs)
     # return -torch.cdist(xq, xs).pow(2)
+
+
+# def l1_dist(xq, xs, epsilon=1e-6):
+#     return -torch.log(torch.cdist(xq, xs, p=1) + epsilon)
 
 
 def l1_dist(xq, xs):
@@ -144,291 +137,17 @@ class MKLoss(nn.Module):
         return loss.mean()
 
 
-class PKLoss(nn.Module):
-    """Loss function: P/K"""
-
-    def __init__(self, T=1.0, logit_func="l2_dist", **kwargs):
-        super().__init__()
-        self.T = T
-        self.logit_func = logit_funcs[logit_func]
-
-    def forward(self, xq, yq, xs, ys, pos):
-        with torch.no_grad():
-            classes, counts = ys.unique(return_counts=True)
-            one_hot = ys.view(-1, 1) == classes
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-
-        mus = torch.mm(one_hot.t().float(), xs)
-        M = mus[yq] - xq
-        C = counts[yq] - 1
-        proto = M / C.unsqueeze(-1).clamp(min=0.1)
-
-        # Numerator P logit
-        if self.logit_func == l2_dist:
-            logit_numerator = -torch.pow(torch.cdist(xq, proto), 2).diag()
-
-        elif self.logit_func == l1_dist:
-            logit_numerator = -torch.cdist(xq, proto, p=1).diag()
-
-        logit_numerator *= C > 0.1
-        pos_logit = logit_numerator.unsqueeze(-1)
-
-        # Denominator K logit
-        logit = self.logit_func(xq, xs) / self.T
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-        neg_logit = torch.logsumexp(logit, 1, keepdim=True)
-
-        loss = neg_logit - pos_logit
-
-        return loss.mean()
-
-
-class KPLoss(nn.Module):
-    """Loss function: K/P"""
-
-    def __init__(self, T=1.0, logit_func="l2_dist", **kwargs):
-        super().__init__()
-        self.T = T
-        self.logit_func = logit_funcs[logit_func]
-
-    def forward(self, xq, yq, xs, ys, pos):
-        with torch.no_grad():
-            classes, counts = ys.unique(return_counts=True)
-            one_hot = ys.view(-1, 1) == classes
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-            yq_new = one_hot[pos].nonzero()[:, 1]
-
-        mus = torch.mm(one_hot.t().float(), xs)
-        M = mus[yq_new] - xq
-        C = counts[yq_new] - 1
-
-        proto = M / C.unsqueeze(-1).clamp(min=0.1)
-        proto_n = mus / counts.unsqueeze(-1).clamp(min=0.1)
-
-        # Denominator K logit
-        logit_denominator_pos = self.logit_func(xq, proto).diag()
-        logit_denominator = self.logit_func(xq, proto_n)
-        logit_denominator[torch.arange(len(yq)), yq_new] = logit_denominator_pos  # nq x class
-
-        neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
-
-        # Numerator P logit
-        logit = self.logit_func(xq, xs) / self.T
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-        pos_logit = torch.logsumexp(
-            masked_logit(logit, class_mask),
-            1,
-            keepdim=True,
-        )
-
-        loss = neg_logit - pos_logit  # 1/N
-
-        return loss.mean()
-
-
-class MPLoss(nn.Module):
-    """Loss function: M/P"""
-
-    def __init__(self, T=1.0, logit_func="l2_dist", **kwargs):
-        super().__init__()
-        self.T = T
-        self.logit_func = logit_funcs[logit_func]
-
-    def forward(self, xq, yq, xs, ys, pos):
-        with torch.no_grad():
-            classes, counts = ys.unique(return_counts=True)
-            one_hot = ys.view(-1, 1) == classes
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            yq_new = one_hot[pos].nonzero()[:, 1]
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-            class_mask[ind[idx], pos[idx]] = False
-
-        mus = torch.mm(one_hot.t().float(), xs)
-        M = mus[yq] - xq
-        C = counts[yq] - 1
-        proto = M / C.unsqueeze(-1).clamp(min=0.1)
-        proto_n = mus / counts.unsqueeze(-1).clamp(min=0.1)
-
-        # Denominator P logit
-        logit_denominator_pos = self.logit_func(xq, proto).diag()
-        logit_denominator = self.logit_func(xq, proto_n)
-        logit_denominator[torch.arange(len(yq)), yq_new] = logit_denominator_pos  # nq x class
-
-        neg_logit = torch.logsumexp(logit_denominator, 1, keepdim=True)
-
-        # Numerator M logit
-        logit = self.logit_func(xq, xs) / self.T
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-        pos_logit = torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
-
-        loss = neg_logit - pos_logit.unsqueeze(-1)
-
-        return loss.mean()
-
-
-class PMLoss(nn.Module):
-    """Loss function: P/M"""
-
-    def __init__(self, T=1.0, logit_func="l2_dist", **kwargs):
-        super().__init__()
-        self.T = T
-        self.logit_func = logit_funcs[logit_func]
-        self.xe = nn.CrossEntropyLoss()
-
-    def forward(self, xq, yq, xs, ys, pos):
-        with torch.no_grad():
-            classes, counts = ys.unique(return_counts=True)
-            one_hot = ys.view(-1, 1) == classes
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-            yq_new = one_hot[pos].nonzero()[:, 1]
-
-        mus = torch.mm(one_hot.t().float(), xs)
-        M = mus[yq_new] - xq
-        C = counts[yq_new] - 1
-        proto = M / C.unsqueeze(-1).clamp(min=0.1)
-        # Numerator P logit
-
-        # logit_numerator = self.logit_func(xq, proto).diag()
-        logit_numerator = -torch.cdist(xq, proto, 2).diag()
-        logit_numerator *= C > 0.1
-        pos_logit = logit_numerator.unsqueeze(-1)
-
-        # Denominator M logit
-        logit = self.logit_func(xq, xs) / self.T
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-        summed_distances = torch.zeros(xq.size(0), len(classes)).cuda()
-
-        for i, cls in enumerate(classes):
-            class_mask_ = ys == cls
-
-            summed_distances[:, i] = logit[:, class_mask_].sum(dim=1)
-
-        adjusted_counts = counts.unsqueeze(0).repeat(len(yq), 1)
-
-        adjusted_counts[ind, yq] -= 1
-        normalized_logit = summed_distances / adjusted_counts
-
-        neg_logit = torch.logsumexp(normalized_logit, 1, keepdim=True)
-
-        loss = neg_logit - pos_logit
-
-        return loss.mean()
-
-
-class KMLoss(nn.Module):
-    """Loss function: K/M"""
-
-    def __init__(self, T=1.0, logit_func="l2_dist", **kwargs):
-        super().__init__()
-        self.T = T
-        self.logit_func = logit_funcs[logit_func]
-        self.xe = nn.CrossEntropyLoss()
-
-    def forward(self, xq, yq, xs, ys, pos):
-        with torch.no_grad():
-            classes, counts = ys.unique(return_counts=True)
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-
-        # Numerator K logit
-        C = counts[yq] - 1
-        logit = self.logit_func(xq, xs) / self.T
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-
-        pos_logit = torch.logsumexp(masked_logit(logit, class_mask), 1, keepdim=True)
-
-        # Denominator M logit
-        summed_distances = torch.zeros(
-            xq.size(0),
-            len(classes),
-        ).cuda()
-
-        for i, cls in enumerate(classes):
-            class_mask_ = ys == cls
-
-            summed_distances[:, i] = logit[:, class_mask_].sum(dim=1)
-
-        adjusted_counts = counts.unsqueeze(0).repeat(len(yq), 1)
-
-        adjusted_counts[ind, yq] -= 1
-        normalized_logit = summed_distances / adjusted_counts
-
-        neg_logit = torch.logsumexp(normalized_logit, 1, keepdim=True)
-
-        loss = neg_logit - pos_logit
-
-        return loss.mean()
-
-
-class MMLoss(nn.Module):
-    """Loss function: M/M"""
-
-    def __init__(self, T=1.0, logit="l2_dist", **kwargs):
-        super().__init__()
-
-        # Logit function
-        self.logit_func = logit_funcs[logit]
-
-        self.T = T
-
-    def forward(self, xq, yq, xs, ys, pos):
-        # Class correspondence
-        with torch.no_grad():
-            classes, counts = ys.unique(return_counts=True)
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-            class_mask[ind[idx], pos[idx]] = False
-
-        logit = self.logit_func(xq, xs) / self.T
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-
-        # Numerator M logit
-        summed_distances = torch.zeros(xq.size(0), len(classes)).cuda()
-
-        for i, cls in enumerate(classes):
-            class_mask_ = ys == cls
-
-            summed_distances[:, i] = logit[:, class_mask_].sum(dim=1)
-
-        adjusted_counts = counts.unsqueeze(0).repeat(len(yq), 1)
-
-        adjusted_counts[ind, yq] -= 1
-        normalized_logit = summed_distances / adjusted_counts
-
-        neg_logit = torch.logsumexp(normalized_logit, 1, keepdim=True)
-
-        # Denominator M logit
-        pos_logit = (torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)).unsqueeze(-1)
-
-        loss = neg_logit - pos_logit
-
-        return loss.mean()
-
-
 class BCELoss(nn.BCEWithLogitsLoss):
-    def __init__(self, T=1.0, logit="l2_dist", **kwargs):
+    def __init__(self, T=1.0, logit="l2_dist", operator='+', **kwargs):
         super(BCELoss, self).__init__(reduction="sum")
 
         # Logit function
         self.logit_func = logit_funcs[logit]
 
+        # self.bias = nn.Parameter(torch.ones(1))
         self.bias = nn.Parameter(torch.zeros(1))
         self.T = T
+        self.operator = operator
 
     def forward(self, xq, yq, xs, ys, pos):
         # Class correspondence
@@ -436,8 +155,13 @@ class BCELoss(nn.BCEWithLogitsLoss):
             one_hot_yq = yq.view(-1, 1) == ys.view(1, -1)  # num_q x num_s
             pos = torch.tensor(pos)
             ind = torch.arange(len(pos))
+        with open("log.txt", "a") as f:
+            f.write(f"{self.bias.item}\n")
 
-        logit = self.logit_func(xq, xs) / self.T - self.bias
+        logit = self.logit_func(xq, xs) / self.T
+
+        # logit = self.logit_func(xq, xs) / self.T - self.bias
+        logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind, pos] += INF  # always correct
 
@@ -478,7 +202,8 @@ class AsymmetricLoss(BCELoss):
             pos = torch.tensor(pos)
             ind = torch.arange(len(pos))
 
-        logit = self.logit_func(xq, xs) / self.T - self.bias
+        # logit = self.logit_func(xq, xs) / self.T - self.bias
+        logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind, pos] += INF  # always correct
 
@@ -523,7 +248,7 @@ class MLLoss(nn.Module):
         self.T = T
         self.p = norm
 
-    def forward(self, xq, yq, xs, ys, pos):
+    def forward(self, fc, xq, yq, xs, ys, pos):
         # Class correspondence
         with torch.no_grad():
             class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
@@ -531,18 +256,16 @@ class MLLoss(nn.Module):
             pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
 
-        # p = F.hardtanh(self.p, 1, 2)
+        m = fc[yq]
 
-        # xq, xs = F.normalize(xq, p=1, dim=-1), F.normalize(xs, p=1, dim=-1)
         logit = -torch.cdist(xq, xs, self.p).pow(self.p) / self.T
+
+        logit /= m
 
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
         pos_logit = torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
 
-        # logit = -torch.cdist(xq, xs, p=0.9)
-        # logit[ind, pos] *= 0
-        # logit[ind[idx], pos[idx]] -= INF
         neg_logit = torch.logsumexp(logit, dim=-1)
 
         loss = neg_logit - pos_logit
@@ -618,101 +341,42 @@ class MatchingNet(nn.Module):
         return loss
 
 
-class AProxy(nn.Module):
-    def __init__(self, T=1, logit_func="l2_dist", **kwargs):
-        super().__init__()
-        self.T = T
-        self.logit_func = logit_funcs[logit_func]
-        # Proxy Anchor Initialization
-        self.proxies = torch.nn.Parameter(torch.randn(64, 128).cuda())
-        nn.init.kaiming_normal_(self.proxies, mode="fan_out")
+class MKELoss(nn.Module):
+    """MKLoss with Episode"""
 
-    def forward(self, xq, yq, xs, ys, pos):
-        with torch.no_grad():
-            classes = torch.arange(64).cuda()  # nq x ns
-            one_hot = yq.view(-1, 1) == classes
-
-        xq = F.normalize(xq, p=2, dim=-1)
-        self.proxies = nn.Parameter(F.normalize(self.proxies, p=2, dim=-1))
-        logit = -torch.cdist(xq, self.proxies)
-        pos_logit = torch.logsumexp(masked_logit(-logit, one_hot), 0, keepdim=True)
-        neg_logit = torch.logsumexp(masked_logit(logit, ~one_hot), 0, keepdim=True)
-        num_pos = one_hot.sum(0).nonzero().size(0)
-
-        pos = torch.log(1 + torch.exp(pos_logit.clamp(min=0))).sum() / num_pos
-        neg = torch.log(1 + torch.exp(neg_logit)).mean()
-
-        loss = pos + neg
-
-        return loss
-
-
-class KProxy(nn.Module):
-    """NCA Loss function: K/K"""
-
-    def __init__(self, T=0.9, logit="l2_dist", **kwargs):
+    def __init__(self, T=1.0, logit="l2_dist", class_aware_sampler=None, **kwargs):
         super().__init__()
 
         # Logit function
         self.logit_func = logit_funcs[logit]
-
+        assert class_aware_sampler is not None, "class-aware-sampler is required"
+        self.class_num = int(class_aware_sampler.split(",")[0])  # n-way
+        self.sample_num = int(class_aware_sampler.split(",")[1])
+        self.support_num = 5  # k-shot
+        self.query_num = self.sample_num - self.support_num  # query
         self.xe = nn.CrossEntropyLoss()
         self.T = T
-        self.proxy = nn.Parameter(torch.randn(64, 128))
-        nn.init.kaiming_uniform_(self.proxy, a=2.23)
 
     def forward(self, xq, yq, xs, ys, pos):
         with torch.no_grad():
-            classes = torch.arange(64).cuda()
-            one_hot = yq.view(-1, 1) == classes
-            yq_new = torch.zeros_like(yq)
+            sorted_indices = ys.argsort()
+            y_s = torch.arange(self.class_num).repeat_interleave(self.support_num).cuda()
+            y_q = torch.arange(self.class_num).repeat_interleave(self.query_num).cuda()
+            class_mask = y_q.view(-1, 1) == y_s.view(1, -1)  # nq x ns
 
-        # C = counts[ys].repeat(len(yq), 1) - 1 * class_mask
-        # P = F.normalize(self.proxy, p=2, dim=-1) * 3
-        # X = F.normalize(xq, p=2, dim=-1)
-        P, X = self.proxy, xq
+        sorted_xs = xs[sorted_indices]
+        assert sorted_xs.size(0) == self.class_num * self.sample_num, "Unexpected number of samples"
+        xs_total = sorted_xs.reshape(self.class_num, self.sample_num, xs.size(-1))
+        x_s = xs_total[:, : self.support_num, :].reshape(-1, xs.size(-1))
+        x_q = xs_total[:, self.support_num :, :].reshape(-1, xs.size(-1))
 
-        logit = -torch.cdist(X, P) / self.T
-        pos_logit = torch.logsumexp(masked_logit(logit, one_hot), 1, keepdim=True)
-        neg_logit = torch.logsumexp(masked_logit(logit, ~one_hot), 1, keepdim=True)
+        distances = self.logit_func(x_q, x_s)
 
-        loss = self.xe(torch.cat([pos_logit, neg_logit], 1), yq_new)
+        pos_logit = torch.sum(distances * class_mask, dim=-1) / class_mask.sum(-1)
+        neg_logit = torch.logsumexp(distances, dim=-1)
 
-        return loss
-
-
-class MKPLoss(nn.Module):
-    """Multi-label Loss function: M/K ✦"""
-
-    def __init__(self, T=1.0, logit="l2_dist", **kwargs):
-        super().__init__()
-
-        # Logit function
-        self.logit_func = logit_funcs[logit]
-        self.T = T
-
-    def forward(self, xq, yq, xs, ys, pos):
-        # Class correspondence
-        with torch.no_grad():
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-            class_mask[ind[idx], pos[idx]] = False
-
-        # xq, xs = F.normalize(xq, p=2, dim=-1), F.normalize(xs, p=2, dim=-1)
-        logit = self.logit_func(xq, xs) / self.T
-
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-
-        pos_si = torch.sum(-logit * class_mask, dim=-1) / class_mask.sum(-1)
-        neg_sj = logit * ~class_mask
-
-        pos_ = torch.log(1 + torch.exp(pos_si).sum())
-        neg_ = torch.log(1 + torch.exp(neg_sj).sum())
-
-        loss = pos_ + neg_
-        return loss
+        loss = neg_logit - pos_logit
+        return loss.mean()
 
 
 # - Wrapper class for distributed training -#
