@@ -248,7 +248,7 @@ class MLLoss(nn.Module):
         self.T = T
         self.p = norm
 
-    def forward(self, fc, xq, yq, xs, ys, pos):
+    def forward(self, xq, yq, xs, ys, pos):
         # Class correspondence
         with torch.no_grad():
             class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
@@ -256,11 +256,7 @@ class MLLoss(nn.Module):
             pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
 
-        m = fc[yq]
-
         logit = -torch.cdist(xq, xs, self.p).pow(self.p) / self.T
-
-        logit /= m
 
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF

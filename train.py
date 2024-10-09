@@ -15,8 +15,8 @@ from torch.utils.data.dataloader import default_collate
 from torch.utils.tensorboard import SummaryWriter
 
 import loss
-import models
 from configuration import args
+from models import ViT
 from src import utils
 from src.dataloader import load_data
 from src.evaluate import evaluate
@@ -94,13 +94,15 @@ def main(args):
     )
 
     print("Creating model")
-    model = getattr(models, args.model)(
-        num_classes=args.num_classes,
-        feature_dim=args.projection_feat_dim,
-        projection=args.projection,
-        use_fc=False,
+    # model = getattr(models, args.model)(
+    #     num_classes=args.num_classes,
+    #     feature_dim=args.projection_feat_dim,
+    #     projection=args.projection,
+    #     use_fc=False,
+    # )
+    model = ViT(
+        img_size=args.train_crop_size, patch_size=16, num_classes=args.num_classes, dim=args.projection_feat_dim
     )
-
     model.to(device)
 
     if args.distributed:
