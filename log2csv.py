@@ -1,8 +1,9 @@
 import csv
 
-# 输入文件名
-input_filename = "result2.log"
+input_filename = "result3.log"
 output_filename = f"{input_filename.split('.')[0]}.csv"
+var_1_name = "lr"
+var_2_name = "epochs"
 
 with open(input_filename, "r") as file:
     data = file.read()
@@ -16,11 +17,11 @@ for line in lines:
         if current_result:
             results.append(current_result)
         parts = line.split()
-        lrw = parts[1].split(":")[1]
-        lrs = parts[3].split(":")[1]
+        var_1_value = parts[1].split(":")[1]
+        var_2_value = parts[3].split(":")[1]
         current_result = {
-            "lrw": lrw,
-            "lrs": lrs,
+            f"{var_1_name}": var_1_value,
+            f"{var_2_name}": var_2_value,
             "Val": {"1-shot": None, "5-shot": None},
             "Test": {"1-shot": None, "5-shot": None},
         }
@@ -41,7 +42,13 @@ if current_result:
     results.append(current_result)
 
 with open(output_filename, "w", newline="") as csvfile:
-    fieldnames = ["Phase", "lrw", "lrs", "1-shot (Accuracy ± Confidence)", "5-shot (Accuracy ± Confidence)"]
+    fieldnames = [
+        "Phase",
+        f"{var_1_name}",
+        f"{var_2_name}",
+        "1-shot (Accuracy ± Confidence)",
+        "5-shot (Accuracy ± Confidence)",
+    ]
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
     for result in results:
@@ -49,8 +56,8 @@ with open(output_filename, "w", newline="") as csvfile:
             writer.writerow(
                 {
                     "Phase": phase,
-                    "lrw": result["lrw"],
-                    "lrs": result["lrs"],
+                    f"{var_1_name}": result[var_1_name],
+                    f"{var_2_name}": result[var_2_name],
                     "1-shot (Accuracy ± Confidence)": result[phase]["1-shot"],
                     "5-shot (Accuracy ± Confidence)": result[phase]["5-shot"],
                 }

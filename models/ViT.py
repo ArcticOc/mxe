@@ -34,27 +34,30 @@ class VisionTransformer(nn.Module):
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=depth)
 
         self.to_cls_token = nn.Identity()
-        # self.layer_norm = nn.LayerNorm(dim)
+        self.layer_norm = nn.LayerNorm(dim)
 
-        # self.mlp_head = nn.Linear(dim, dim)
+        # self.mlp_head = nn.Linear(dim, num_classes)
         self.linear_proj = nn.Linear(dim, dim)
 
         self._init_weights()
 
+        # Freeze layers before linear_proj
+        self._freeze_pre_linear_layers()
+
     def _init_weights(self):
-        # https://github.com/huggingface/pytorch-image-models/blob/4d4bdd64a996bf7b5919ec62f20af4a1c07d5848/timm/models/vision_transformer.py#L2107
-        pretrained_model = timm.create_model('vit_small_patch16_224', pretrained=True)
+        # Load pretrained weights
+        pretrained_model = timm.create_model("vit_small_patch16_224", pretrained=True)
         pretrained_state_dict = pretrained_model.state_dict()
 
         model_state_dict = self.state_dict()
 
-        pretrained_state_dict = {k: v for k, v in pretrained_state_dict.items() if 'head' not in k}
+        pretrained_state_dict = {k: v for k, v in pretrained_state_dict.items() if "head" not in k}
 
         mapping = {
-            'patch_embed.proj.weight': 'patch_embed.weight',
-            'patch_embed.proj.bias': 'patch_embed.bias',
-            'cls_token': 'cls_token',
-            'pos_embed': 'pos_embedding',
+            "patch_embed.proj.weight": "patch_embed.weight",
+            "patch_embed.proj.bias": "patch_embed.bias",
+            "cls_token": "cls_token",
+            "pos_embed": "pos_embedding",
         }
 
         for k in pretrained_state_dict:
@@ -65,6 +68,19 @@ class VisionTransformer(nn.Module):
                 model_state_dict[new_k] = pretrained_state_dict[k]
 
         self.load_state_dict(model_state_dict)
+
+    def _freeze_pre_linear_layers(self):
+        # Freeze patch embedding
+        for param in self.patch_embed.parameters():
+            param.requires_grad = False
+
+        # Freeze positional embedding and class token
+        self.pos_embedding.requires_grad = False
+        self.cls_token.requires_grad = False
+
+        # Freeze transformer encoder layers
+        for param in self.transformer.parameters():
+            param.requires_grad = False
 
     def forward(self, x):
         b, c, h, w = x.shape
@@ -81,6 +97,8 @@ class VisionTransformer(nn.Module):
         x = self.transformer(x)
         # x = self.layer_norm(x[:, 0])
         patch_tokens = x[:, 1:]  # [B, num_patches, dim]
+        # w = self.layer_norm(x[:, 0])
+        # w = self.mlp_head(w)
         x = self.linear_proj(patch_tokens.mean(dim=1))
-        # x = self.layer_norm(x)  # [B, dim]
+        x = self.layer_norm(x)  # [B, dim]
         return x, w
