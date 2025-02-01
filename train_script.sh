@@ -2,9 +2,9 @@
 
 # torchrun --nproc_per_node=4 --master_port=35757 train.py --logit=l2_dist --resume=result/l1wcp/KK/checkpoints/best_shot5_model.pth --tsne
 
-# torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l1_dist --loss=MKLoss --output-dir=result/mk --class-proxy
+torchrun --nproc_per_node=4 --master_port=35768 train.py --logit=l1_dist --loss=MKLoss --output-dir=result/mk --class-proxy
 
-torchrun --nproc_per_node=1 --master_port=35768 train.py --logit=l1_dist --loss=ProtoNet --output-dir=result/pn --class-aware-sampler='64,8' --batch-size=512
+# torchrun --nproc_per_node=1 --master_port=35768 train.py --logit=l1_dist --loss=ProtoNet --output-dir=result/pn --class-aware-sampler='64,8' --batch-size=512
 
 # losses=('MLLoss')
 # datas=('cifar_fs' 'mini_imagenet')

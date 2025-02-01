@@ -1,0 +1,7 @@
+-f https://download.pytorch.org/whl/cu113
+numpy==1.23.5
+torch==1.12.1
+torchvision==0.13.1
+tensorboard==2.12.1
+tensorboard-data-server
+tqdm
