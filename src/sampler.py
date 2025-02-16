@@ -3,6 +3,7 @@ This code is based on
 https://github.com/pytorch/vision/tree/main/references/classification
 
 modified by Takumi Kobayashi
+improved by Tong Wu
 """
 
 import math

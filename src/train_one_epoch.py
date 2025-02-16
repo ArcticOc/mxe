@@ -1,3 +1,9 @@
+"""
+This code is based on
+https://github.com/pytorch/vision/tree/main/references/classification
+modified by Tong Wu
+"""
+
 import time
 
 import torch
@@ -29,7 +35,7 @@ def train_one_epoch(
         image, target = image.to(device), target.to(device)
         with torch.cuda.amp.autocast(enabled=scaler is not None):
             output, output_fc = model(image)
-            loss = criterion(output, target)
+            loss, intra_variance = criterion(output, target)
 
         optimizer.zero_grad()
         if scaler is not None:
@@ -57,12 +63,6 @@ def train_one_epoch(
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
         if writer is not None:
             writer.add_scalar("Loss/train", loss.item(), epoch * len(data_loader) + i)
-            """ if hasattr(model.module, "proj1"):
-                layer = model.module.proj1
-                writer.add_histogram(
-                    "Gradients",
-                    layer.weight.grad,
-                    epoch * len(data_loader) + i,
-                ) """
+            writer.add_scalar("Intra Variance/train", intra_variance, epoch * len(data_loader) + i)
 
     return metric_logger

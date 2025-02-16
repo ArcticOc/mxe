@@ -1,8 +1,10 @@
 """
 Loss functions for few-shot learning
 written by Takumi Kobayashi
-WU modified and added additional features
+Tong Wu modified and added additional features
 """
+
+import os
 
 import torch
 import torch.distributed.nn
@@ -45,7 +47,7 @@ class KKLoss(nn.Module):
 
         # Logit function
         self.logit_func = logit_funcs[logit]
-
+        self.logit = logit
         self.xe = nn.CrossEntropyLoss()
         self.T = T
 
@@ -64,6 +66,9 @@ class KKLoss(nn.Module):
             pos = torch.tensor(pos)
             ind = torch.arange(len(pos))
             yq_new = torch.zeros_like(yq)
+            var_intra = compute_intra_class_variance(xq, yq, distance=self.logit)[0]
+            class_variance = compute_intra_class_variance(xs, ys, distance=self.logit)[1]
+            log_variances(class_variance, "kkvar")
 
         logit = self.logit_func(xq, xs) / self.T
         # logit += torch.log(torch.reciprocal(C))
@@ -74,7 +79,7 @@ class KKLoss(nn.Module):
 
         loss = self.xe(torch.cat([pos_logit, neg_logit], 1), yq_new)
 
-        return loss
+        return loss, var_intra
 
 
 class PPLoss(nn.Module):
@@ -83,7 +88,7 @@ class PPLoss(nn.Module):
 
         # Logit function
         self.logit_func = logit_funcs[logit]
-
+        self.logit = logit
         self.xe = nn.CrossEntropyLoss()
         self.T = T
 
@@ -93,6 +98,9 @@ class PPLoss(nn.Module):
             one_hot = ys.view(-1, 1) == classes  # ns x #class
             class_count = one_hot.sum(0, keepdim=True)  # 1 x #class
             yq_new = one_hot[pos].nonzero()[:, 1]
+            var_intra = compute_intra_class_variance(xq, yq, distance=self.logit)[0]
+            class_variance = compute_intra_class_variance(xs, ys, distance=self.logit)[1]
+            log_variances(class_variance, "ppvar")
 
         mus = torch.mm(one_hot.t().float(), xs)  # #class x dim
         M = mus.unsqueeze(0).repeat(len(yq), 1, 1)  # nq x #class x dim
@@ -107,7 +115,7 @@ class PPLoss(nn.Module):
             logit = -(xq.unsqueeze(1) - M / C.unsqueeze(-1).clamp(min=0.1)).abs().sum(-1)
         logit *= C > 0.1  # exclude empty class
 
-        return self.xe(logit / self.T, yq_new)
+        return self.xe(logit / self.T, yq_new), var_intra
 
 
 class MKLoss(nn.Module):
@@ -118,7 +126,7 @@ class MKLoss(nn.Module):
 
         # Logit function
         self.logit_func = logit_funcs[logit]
-
+        self.logit = logit
         self.T = T
 
     def forward(self, xq, yq, xs, ys, pos):
@@ -128,13 +136,16 @@ class MKLoss(nn.Module):
             idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
             pos, ind = torch.tensor(pos), torch.arange(len(pos))
             class_mask[ind[idx], pos[idx]] = False
+            var_intra = compute_intra_class_variance(xq, yq, distance=self.logit)[0]
+            class_variance = compute_intra_class_variance(xs, ys, distance=self.logit)[1]
+            log_variances(class_variance, "mkvar")
 
         logit = self.logit_func(xq, xs) / self.T
         logit[ind, pos] *= 0
         logit[ind[idx], pos[idx]] -= INF
 
         loss = torch.logsumexp(logit, dim=-1) - torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
-        return loss.mean()
+        return loss.mean(), var_intra
 
 
 class BCELoss(nn.BCEWithLogitsLoss):
@@ -235,37 +246,6 @@ class AsymmetricLoss(BCELoss):
             loss *= one_sided_w
 
         return -loss.sum(dim=-1).mean()
-
-
-class MLLoss(nn.Module):
-    """Multi-label Loss function: M/K ✦"""
-
-    def __init__(self, T=1.0, logit="l2_dist", norm=2, **kwargs):
-        super().__init__()
-
-        # Logit function
-        self.logit_func = logit_funcs[logit]
-        self.T = T
-        self.p = norm
-
-    def forward(self, xq, yq, xs, ys, pos):
-        # Class correspondence
-        with torch.no_grad():
-            class_mask = yq.view(-1, 1) == ys.view(1, -1)  # nq x ns
-            idx = (class_mask.sum(-1) > 1).cpu()  # multiple labels
-            pos, ind = torch.tensor(pos), torch.arange(len(pos))
-            class_mask[ind[idx], pos[idx]] = False
-
-        logit = -torch.cdist(xq, xs, self.p).pow(self.p) / self.T
-
-        logit[ind, pos] *= 0
-        logit[ind[idx], pos[idx]] -= INF
-        pos_logit = torch.sum(logit * class_mask, dim=-1) / class_mask.sum(-1)
-
-        neg_logit = torch.logsumexp(logit, dim=-1)
-
-        loss = neg_logit - pos_logit
-        return loss.mean()
 
 
 class ProtoNet(nn.Module):
@@ -409,3 +389,89 @@ class WrapperLoss(torch.nn.Module):
         pos = torch.arange(batch_size * self.rank, batch_size * (self.rank + 1)).tolist()
 
         return self.loss(local_embeddings, local_labels, embeddings, labels, pos)
+
+
+def compute_intra_class_variance(xq, yq, min_samples=3, distance="l1_dist"):
+    """
+    计算给定特征 xq 在其对应的标签 yq 下的类内方差 (Intra-Class Variance)，
+    支持基于曼哈顿距离(L1)或欧几里得距离(L2)的计算；
+    跳过样本数少于 min_samples 的类别。
+
+    参数:
+        xq: torch.Tensor, [num_q, dim]，Query 样本特征
+        yq: torch.Tensor, [num_q]，Query 样本标签 (整数类别编号)
+        min_samples: int, 若某一类别样本数 < min_samples，则跳过该类的方差统计
+        distance: str, "l1" 或 "l2" 用于指定距离类型
+
+    返回:
+        overall_variance: float
+            所有类别的加权平均类内方差
+        class_variances: dict
+            {class_label: variance}，每个类别的方差
+    """
+
+    # 取出所有类别
+    unique_classes = yq.unique()
+
+    # 用来统计总的类内方差（加权）
+    total_variance = 0.0
+    total_count = 0
+    class_variances = {}
+
+    for cls in unique_classes:
+        mask = yq == cls
+        xq_c = xq[mask]  # 取出属于该类的样本 [Nc, dim]
+
+        # 跳过样本数 < min_samples 的类别
+        if xq_c.shape[0] < min_samples:
+            continue
+
+        Nc = xq_c.shape[0]
+
+        if distance == "l1_dist":
+            # 在 L1 度量下，最优中心通常是各维度的中位数（median）
+            median_c = xq_c.median(dim=0).values  # [dim]
+            # 计算每个样本到该中心的 L1 距离
+            dist_c = (xq_c - median_c).abs().sum(dim=1)  # [Nc]
+            # 这里直接用 L1 距离的均值作为“类内方差”的度量
+            var_c = dist_c.mean()
+
+        elif distance == "l2_dist":
+            # 在 L2 度量下，最优中心通常是各维度的均值（mean）
+            mean_c = xq_c.mean(dim=0)  # [dim]
+            # 计算每个样本到该中心的 L2 距离
+            dist_c = (xq_c - mean_c).pow(2).sum(dim=1).sqrt()  # [Nc]
+            # 你可以选择:
+            # 1) 用 L2 距离的均值 (散度)
+            # 2) 用 (L2 距离)^2 的均值 (更贴近“方差”概念)
+            # 下例直接用 (L2 距离) 的均值
+            # var_c = dist_c.mean()
+
+            # 如果你想严格对标欧几里得方差，可以改成:
+            var_c = (dist_c**2).mean()
+
+        else:
+            raise ValueError(f"Unsupported distance type: {distance}. Use 'l1' or 'l2'.")
+
+        class_variances[int(cls.item())] = var_c.item()
+
+        total_variance += var_c.item() * Nc
+        total_count += Nc
+
+    overall_variance = 0.0 if total_count == 0 else total_variance / total_count
+
+    return overall_variance, class_variances
+
+
+def log_variances(class_variances, filename):
+    os.makedirs("variances", exist_ok=True)
+
+    file_path = f"variances/{filename}.csv"
+    file_exists = os.path.exists(file_path)
+
+    with open(file_path, "a", encoding="utf-8") as f:
+        if not file_exists:
+            f.write("cls,variance\n")
+
+        for cls, var_val in class_variances.items():
+            f.write(f"{cls},{var_val}\n")

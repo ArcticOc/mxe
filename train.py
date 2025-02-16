@@ -229,7 +229,7 @@ def main(args):
         if scaler:
             scaler.load_state_dict(checkpoint["scaler"])
     if args.tsne:
-        tSNE = TSNEVisualizer(data_loader_val, model, args)
+        tSNE = TSNEVisualizer(data_loader_val, model_without_ddp, args)
         tSNE.visualize_with_tsne()
 
         return print("t-SNE visualization is saved.")

@@ -3,8 +3,8 @@ This code is based on
 https://github.com/fiveai/on-episodes-fsl/
 
 modified by Takumi Kobayashi
+Improved by Tong Wu
 """
-# WU simplified and added additional features
 
 import os
 import random
